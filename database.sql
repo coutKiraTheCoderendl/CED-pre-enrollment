@@ -97,7 +97,7 @@ CREATE TABLE curriculum (
 CREATE TABLE subject_schedules (
     id          INT AUTO_INCREMENT PRIMARY KEY,
     subject_id  INT NOT NULL,
-    day         ENUM('Mon','Tue','Wed','Thu','Fri','Sat') NOT NULL,
+    day         ENUM('Mon/Thu','Tue/Fri','Wed/Sat','Mon','Tue','Wed','Thu','Fri','Sat') NOT NULL,
     time_start  TIME NOT NULL,
     time_end    TIME NOT NULL,
     room        VARCHAR(50) DEFAULT NULL,
@@ -209,7 +209,7 @@ CREATE TABLE sections (
     teacher_id  INT DEFAULT NULL,
     section_code VARCHAR(10) NOT NULL,
     capacity    TINYINT NOT NULL DEFAULT 40,
-    day         ENUM('Mon','Tue','Wed','Thu','Fri','Sat') DEFAULT NULL,
+    day         ENUM('Mon/Thu','Tue/Fri','Wed/Sat','Mon','Tue','Wed','Thu','Fri','Sat') DEFAULT NULL,
     time_start  TIME DEFAULT NULL,
     time_end    TIME DEFAULT NULL,
     room        VARCHAR(50) DEFAULT NULL,
@@ -534,18 +534,18 @@ SELECT * FROM students;
 SELECT * FROM users;
 SELECT * FROM enrollment_settings;
 
-ALTER TABLE students MODIFY COLUMN type ENUM('new', 'old', 'shiftee') NOT NULL DEFAULT 'new';
+ALTER TABLE students MODIFY COLUMN type ENUM('new', 'returning', 'shiftee') NOT NULL DEFAULT 'new';
 
 SHOW COLUMNS FROM students LIKE 'type';
 
 ALTER TABLE users MODIFY COLUMN role 
 ENUM('student','admin','business_office','teacher') NOT NULL;
 
-UPDATE users SET password = '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' WHERE username = 'admin';
-UPDATE users SET password = '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' WHERE username = 'busoff';
+UPDATE users SET password = '$2b$10$qtvX5nm4ixIW96Nx.qDFYuukdThXPxKhLlzC05L0g/ZNXtxgngf7i' WHERE username = 'admin';
+UPDATE users SET password = '$2b$10$qtvX5nm4ixIW96Nx.qDFYuukdThXPxKhLlzC05L0g/ZNXtxgngf7i' WHERE username = 'busoff';
 
 INSERT INTO users (username, password, role) VALUES 
-('teacher1', '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'teacher');
+('teacher1', '$2b$10$qtvX5nm4ixIW96Nx.qDFYuukdThXPxKhLlzC05L0g/ZNXtxgngf7i', 'teacher');
 INSERT INTO teachers (user_id, first_name, last_name, email, department_id)
 VALUES (LAST_INSERT_ID(), 'Kar', 'Baring', 'karizzaabaring@su.edu.ph', 1);
 
@@ -569,3 +569,43 @@ ALTER TABLE enrollment_settings ADD COLUMN previous_school_year VARCHAR(10) DEFA
 ALTER TABLE enrollment_settings ADD COLUMN previous_semester TINYINT DEFAULT NULL;
 
 SELECT id, student_number, first_name, last_name, type, year_level, ok_to_enroll, current_semester FROM students;
+
+-- ============================================================
+--  Migration: Add admin notice support + ensure columns exist
+--  Run this once on your existing ced_preenrollment DB
+-- ============================================================
+
+USE ced_preenrollment;
+
+-- 1. Expand notices.type ENUM to include 'general' (admin broadcasts)
+ALTER TABLE notices 
+  MODIFY COLUMN type 
+  ENUM('unit_overload','unit_underload','f2f_required','conflict','prereq_not_met','general') 
+  NOT NULL DEFAULT 'f2f_required';
+
+-- 2. Ensure enrollments.section_id column exists (may already exist)
+-- Safe to run even if already added:
+ALTER TABLE enrollments 
+  ADD COLUMN IF NOT EXISTS section_id INT DEFAULT NULL;
+
+-- Try adding FK only if it doesn't exist (ignore error if already present)
+ALTER TABLE enrollments 
+  ADD CONSTRAINT fk_enrollment_section 
+  FOREIGN KEY (section_id) REFERENCES sections(id) 
+  ON DELETE SET NULL;
+
+-- 3. Ensure students.current_semester exists
+ALTER TABLE students 
+  ADD COLUMN IF NOT EXISTS current_semester TINYINT NOT NULL DEFAULT 1;
+
+-- 4. Ensure enrollment_settings has previous_school_year / previous_semester
+ALTER TABLE enrollment_settings 
+  ADD COLUMN IF NOT EXISTS previous_school_year VARCHAR(10) DEFAULT NULL;
+
+ALTER TABLE enrollment_settings 
+  ADD COLUMN IF NOT EXISTS previous_semester TINYINT DEFAULT NULL;
+
+-- 5. Verify
+SHOW COLUMNS FROM notices;
+SHOW COLUMNS FROM enrollments;
+SHOW COLUMNS FROM sections;
