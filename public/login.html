@@ -24,15 +24,20 @@
     align-items: center;
     background: var(--cream);
     font-family: Arial, sans-serif;
+    background-image: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), url(/assets/SU-Hall.jpg);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
   }
 
   .card {
-    background: var(--white);
+    background: #f8f8f8;
     border-radius: 8px;
     box-shadow: 0 4px 24px rgba(0,0,0,0.1);
     padding: 2.5rem;
-    width: 100%;
-    max-width: 400px;
+    width: 400px;
+    max-width: 90vw;
   }
 
   .logo-area {
@@ -131,7 +136,7 @@
 
 <div class="card">
   <div class="logo-area">
-    <img src="/assets/CED-Logo.jpg" alt="CED Logo"/>
+    <img src="/assets/CED-Logo-NoBG.png" alt="CED Logo"/>
     <!-- swap the src above to wherever you put your logo file -->
     <h1>CED Pre-Enrollment System</h1>
     <p>Login Portal</p>
@@ -183,11 +188,20 @@ async function handleLogin() {
     localStorage.setItem('token', data.token);
     localStorage.setItem('role', data.role);
 
-    // Redirect based on role
-    if (data.role === 'student') window.location.href = '/student/dashboard.html';
-    else if (data.role === 'admin') window.location.href = '/admin/dashboard.html';
-    else if (data.role === 'business_office') window.location.href = '/bfo/dashboard.html';
-    else if (data.role === 'teacher') window.location.href = '/teacher/dashboard.html';
+    if (data.role === 'student') {
+    window.location.href = '/student/dashboard.html';
+
+    } else if (data.role === 'admin') {
+    window.location.href = '/admin/dashboard.html';
+
+    } else if (data.role === 'business_office') {
+    window.location.href = '/bfo/dashboard.html';
+    
+  
+    } else if (data.role === 'teacher') {
+    window.location.href = '/teacher/dashboard.html';
+    }
+
 
   } catch (err) {
     showError('Cannot connect to server. Please try again.');

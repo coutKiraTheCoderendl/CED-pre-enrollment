@@ -3,488 +3,380 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Teacher Dashboard — CED Pre-Enrollment</title>
+<title>Teacher Portal — CED Pre-Enrollment</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Serif+Display&display=swap" rel="stylesheet"/>
 <style>
   :root {
-    --maroon:      #6e1020;
+    --maroon: #6e1020;
     --maroon-dark: #4a0a15;
-    --maroon-bg:   #fdf5f6;
-    --white:       #ffffff;
-    --gray-50:     #f8f8f8;
-    --gray-100:    #f0f0f0;
-    --gray-300:    #d0d0d0;
-    --gray-500:    #888;
-    --gray-700:    #444;
-    --success:     #1a7a4a;
-    --success-bg:  #edfaf3;
-    --error:       #c0392b;
-    --error-bg:    #fdf0ef;
-    --warning:     #b45309;
-    --warning-bg:  #fef9ee;
+    --gold: #e8c97a;
+    --glass-white: rgba(255, 255, 255, 0.85);
+    --glass-border: rgba(255, 255, 255, 0.4);
+    --text-main: #2d3436;
+    --text-muted: #636e72;
+    --success: #1a7a4a;
+    --success-bg: #edfaf3;
+    --warning: #b45309;
+    --warning-bg: #fef9ee;
+    --error: #c0392b;
+    --error-bg: #fdf0ef;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
     font-family: 'DM Sans', sans-serif;
-    background: var(--gray-50);
-    color: var(--gray-700);
+    background: url('/assets/SU-Hall.jpg') no-repeat center center fixed;
+    background-size: cover;
+    color: var(--text-main);
     min-height: 100vh;
+    overflow-x: hidden;
   }
 
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.25);
+    z-index: -1;
+  }
+
+  /* SIDEBAR */
   .sidebar {
     position: fixed;
-    top: 0; left: 0;
-    width: 220px;
-    height: 100vh;
-    background: #1a0a00;
+    top: 20px; left: 20px; bottom: 20px;
+    width: 260px;
+    background: rgba(74, 10, 21, 0.85);
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
     display: flex;
     flex-direction: column;
     z-index: 100;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   }
 
   .sidebar-brand {
-    padding: 1.5rem 1.25rem;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
+    padding: 2.5rem 1.5rem;
+    text-align: center;
   }
 
   .sidebar-brand img {
-    height: 40px;
-    margin-bottom: 0.5rem;
+    height: 60px; width: 60px;
+    margin: 0 auto 1rem;
     display: block;
+    background: white;
+    border-radius: 50%;
+    padding: 2px;
   }
 
   .sidebar-brand h2 {
     font-family: 'DM Serif Display', serif;
-    font-size: 13px;
     color: #fff;
-    line-height: 1.3;
-    font-weight: 400;
-  }
-
-  .sidebar-brand p {
-    font-size: 10px;
-    color: rgba(255,255,255,0.4);
-    margin-top: 2px;
-    letter-spacing: 0.06em;
+    font-size: 16px;
+    letter-spacing: 1px;
     text-transform: uppercase;
   }
 
-  .sidebar-nav { flex: 1; padding: 1rem 0; }
+  .nav-group { flex: 1; padding: 1rem; }
 
   .nav-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 1.25rem;
-    font-size: 13px;
-    color: rgba(255,255,255,0.55);
-    cursor: pointer;
-    border-left: 3px solid transparent;
-    transition: all 0.15s;
-    user-select: none;
-  }
-
-  .nav-item:hover { color: #fff; background: rgba(255,255,255,0.05); }
-  .nav-item.active { color: #fff; border-left-color: #e8c97a; background: rgba(255,255,255,0.07); }
-  .nav-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-
-  .sidebar-footer {
-    padding: 1rem 1.25rem;
-    border-top: 1px solid rgba(255,255,255,0.08);
-  }
-
-  .logout-btn {
-    width: 100%;
-    padding: 8px;
-    background: rgba(255,255,255,0.07);
+    justify-content: space-between;
+    padding: 14px 18px;
     color: rgba(255,255,255,0.6);
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12px;
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 4px;
     cursor: pointer;
-    transition: all 0.15s;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    transition: all 0.3s ease;
+    font-size: 14px;
   }
 
-  .logout-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+  .nav-item:hover { background: rgba(255,255,255,0.1); color: #fff; }
+  .nav-item.active { background: var(--gold); color: var(--maroon-dark); font-weight: 600; }
 
-  .main { margin-left: 220px; min-height: 100vh; display: flex; flex-direction: column; }
+  .notice-badge {
+    background: var(--gold);
+    color: var(--maroon-dark);
+    border-radius: 20px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: bold;
+  }
 
-  .topbar {
-    background: var(--white);
-    border-bottom: 1px solid var(--gray-100);
-    padding: 1rem 2rem;
+  .logout-area { padding: 1.5rem; }
+  .btn-logout {
+    width: 100%; padding: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 12px;
+    color: #fff;
+    cursor: pointer;
+    backdrop-filter: blur(5px);
+    transition: 0.2s;
+  }
+  .btn-logout:hover { background: rgba(255,255,255,0.2); }
+
+  /* MAIN CONTENT AREA */
+  .main { margin-left: 300px; padding: 20px; }
+
+  .header-glass {
+    background: var(--glass-white);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    padding: 1.5rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .header-glass h1 { font-family: 'DM Serif Display', serif; font-size: 1.8rem; color: var(--maroon); }
+
+  /* CONTENT GLASS PANELS */
+  .content-glass {
+    background: var(--glass-white);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-bottom: 20px;
+    animation: fadeInUp 0.5s ease forwards;
+  }
+
+  /* TEACHER PROFILE */
+  .teacher-profile {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-  }
-
-  .topbar h1 {
-    font-family: 'DM Serif Display', serif;
-    font-size: 1.3rem;
-    color: var(--maroon-dark);
-    font-weight: 400;
-  }
-
-  .topbar-user { font-size: 12px; color: var(--gray-500); }
-  .content { padding: 2rem; flex: 1; }
-  .panel { display: none; }
-  .panel.active { display: block; }
-
-  /* SUBJECT CARDS */
-  .subject-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 1rem;
+    gap: 1.5rem;
     margin-bottom: 2rem;
   }
 
-  .subject-card {
-    background: var(--white);
-    border: 1px solid var(--gray-100);
-    border-radius: 8px;
-    padding: 1.25rem;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-  }
-
-  .subject-card:hover { border-color: var(--maroon); background: var(--maroon-bg); }
-  .subject-card.active { border-color: var(--maroon); border-width: 2px; }
-
-  .subject-card-code {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--maroon);
-    margin-bottom: 4px;
-  }
-
-  .subject-card-name {
-    font-size: 12px;
-    color: var(--gray-700);
-    line-height: 1.4;
-    margin-bottom: 8px;
-  }
-
-  .subject-card-units {
-    font-size: 11px;
-    color: var(--gray-500);
-  }
-
-  /* TABLE */
-  .table-card {
-    background: var(--white);
-    border: 1px solid var(--gray-100);
-    border-radius: 8px;
-    overflow: hidden;
-  }
-
-  .table-header {
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid var(--gray-100);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .table-header h3 {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--maroon-dark);
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-
-  thead th {
-    padding: 10px 1.5rem;
-    text-align: left;
-    font-size: 11px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    color: var(--gray-500);
-    background: var(--gray-50);
-    border-bottom: 1px solid var(--gray-100);
-  }
-
-  tbody tr { border-bottom: 1px solid var(--gray-100); }
-  tbody tr:last-child { border-bottom: none; }
-  tbody tr:hover { background: var(--maroon-bg); }
-  tbody td { padding: 10px 1.5rem; color: var(--gray-700); }
-
-  .badge {
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 500;
-    padding: 3px 8px;
-    border-radius: 10px;
-  }
-
-  .badge-pass   { background: var(--success-bg); color: var(--success); }
-  .badge-fail   { background: var(--error-bg);   color: var(--error); }
-  .badge-none   { background: var(--gray-100);   color: var(--gray-500); }
-
-  .grade-input {
-    width: 70px;
-    padding: 5px 8px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
-    border: 1px solid var(--gray-300);
-    border-radius: 4px;
-    outline: none;
-    text-align: center;
-  }
-
-  .grade-input:focus { border-color: var(--maroon); }
-
-  .btn-save {
-    padding: 5px 12px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 12px;
-    background: var(--maroon);
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-
-  .btn-save:hover { background: var(--maroon-dark); }
-  .btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
-
-  .empty-state {
-    text-align: center;
-    padding: 3rem;
-    color: var(--gray-500);
-    font-size: 14px;
-  }
-
-  .profile-card {
-    background: var(--white);
-    border: 1px solid var(--gray-100);
-    border-radius: 8px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-
-  .profile-avatar {
-    width: 50px; height: 50px;
+  .teacher-avatar {
+    width: 70px; height: 70px;
     border-radius: 50%;
     background: var(--maroon);
     display: flex;
     align-items: center;
     justify-content: center;
     font-family: 'DM Serif Display', serif;
-    font-size: 1.2rem;
+    font-size: 1.8rem;
     color: #fff;
-    flex-shrink: 0;
   }
 
-  .profile-info h2 {
-    font-family: 'DM Serif Display', serif;
-    font-size: 1.1rem;
-    color: var(--maroon-dark);
-    font-weight: 400;
+  .teacher-info h3 { font-family: 'DM Serif Display', serif; color: var(--maroon-dark); font-size: 1.4rem; }
+  .teacher-info p { font-size: 13px; color: var(--text-muted); }
+
+  /* SUBJECT GRID */
+  .subject-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
   }
 
-  .profile-info p { font-size: 13px; color: var(--gray-500); }
+  .subject-card {
+    background: white;
+    border-radius: 15px;
+    padding: 1.5rem;
+    border: 1px solid var(--glass-border);
+    cursor: pointer;
+    transition: 0.3s;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+  }
 
-  .section-label {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--gray-500);
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    margin-bottom: 10px;
+  .subject-card:hover { transform: translateY(-5px); box-shadow: 0 8px 15px rgba(0,0,0,0.1); border-color: var(--maroon); }
+  .subject-card.active { border: 2px solid var(--maroon); background: rgba(110,16,32,0.05); }
+  .subject-card-code { font-weight: 700; color: var(--maroon); font-size: 1.1rem; margin-bottom: 5px; }
+  .subject-card-name { font-size: 14px; color: var(--text-muted); margin-bottom: 8px; }
+  .subject-card-units { font-size: 12px; font-weight: 600; }
+
+  /* TABLES */
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  th { text-align: left; padding: 15px; color: var(--text-muted); font-size: 11px; text-transform: uppercase; border-bottom: 2px solid rgba(0,0,0,0.05); }
+  td { padding: 15px; font-size: 14px; border-bottom: 1px solid rgba(0,0,0,0.05); }
+
+  /* BADGES & INPUTS */
+  .badge { 
+    display: inline-block;
+    padding: 4px 12px; 
+    border-radius: 20px; 
+    font-size: 11px; 
+    font-weight: 600; 
+  }
+  .badge-pass { background: var(--success-bg); color: var(--success); }
+  .badge-fail { background: var(--error-bg); color: var(--error); }
+  .badge-pending { background: var(--warning-bg); color: var(--warning); }
+  .badge-none { background: #f1f3f4; color: var(--text-muted); }
+
+  .grade-input {
+    width: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 8px; text-align: center;
+  }
+
+  .btn-action, .btn-save {
+    background: var(--maroon);
+    color: white; border: none; padding: 8px 16px; border-radius: 8px;
+    cursor: pointer; font-size: 12px; transition: 0.3s;
+  }
+  .btn-action:hover, .btn-save:hover { background: var(--maroon-dark); transform: scale(1.02); }
+
+  /* PANELS */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .empty-state { text-align: center; color: var(--text-muted); padding: 40px 0; font-style: italic; }
+
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   .toast {
-    position: fixed;
-    bottom: 2rem;
-    right: 2rem;
-    padding: 10px 16px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    z-index: 300;
-    display: none;
+    position: fixed; bottom: 30px; right: 30px; padding: 15px 25px;
+    border-radius: 12px;
+    display: none; z-index: 1000; box-shadow: 0 10px 20px rgba(0,0,0,0.2);
   }
-
-  .toast-success { background: var(--success); color: #fff; }
-  .toast-error   { background: var(--error);   color: #fff; }
-
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
-  .content { animation: fadeIn 0.3s ease both; }
+  .toast-success { background: var(--success); color: white; }
+  .toast-error { background: var(--error); color: white; }
 </style>
 </head>
 <body>
 
 <div class="sidebar">
   <div class="sidebar-brand">
-    <img src="/assets/CED-Logo.jpg" alt="CED"/>
-    <h2>CED Pre-Enrollment System</h2>
-    <p>Teacher Portal</p>
+    <img src="/assets/CED-Logo-NoBG.png" alt="CED Logo"/>
+    <h2>TEACHER PORTAL</h2>
+    <p style="color: var(--gold); font-size: 10px; margin-top: 5px;">COLLEGE OF ENGINEERING</p>
   </div>
-  <nav class="sidebar-nav">
-    <div class="nav-item active" onclick="showPanel('subjects', this)">
-      <span class="nav-dot"></span> My Subjects
+  
+  <nav class="nav-group">
+    <div class="nav-item active" onclick="showPanel('overview', this)">
+      <span>My Subjects</span>
     </div>
     <div class="nav-item" onclick="showPanel('grades', this)">
-      <span class="nav-dot"></span> Enter Grades
+      <span>Enter Grades</span>
     </div>
-      <div class="nav-item" onclick="showPanel('advising', this)">
-        <span class="nav-dot"></span> Advising Queue
-        <span id="advisingCount" style="display:none; background:#c0392b; color:#fff; font-size:10px; padding:1px 6px; border-radius:10px; margin-left:auto;"></span>
+    <div class="nav-item" onclick="showPanel('advising', this)">
+      <span>Advising Queue</span>
+      <span id="advisingCount" class="notice-badge" style="display: none;">0</span>
     </div>
-      <div class="nav-item" onclick="showPanel('notices', this)">
-        <span class="nav-dot"></span> Send Notice
+    <div class="nav-item" onclick="showPanel('notices', this)">
+      <span>Send Notice</span>
     </div>
   </nav>
-  <div class="sidebar-footer">
-    <button class="logout-btn" onclick="logout()">Sign Out</button>
+
+  <div class="logout-area">
+    <button class="btn-logout" onclick="logout()">Sign Out</button>
   </div>
 </div>
 
 <div class="main">
-  <div class="topbar">
-    <h1>Teacher Dashboard</h1>
-    <span class="topbar-user" id="topbarUser">Teacher</span>
+  <div class="header-glass">
+    <h1 id="viewTitle">My Subjects</h1>
+    <div style="text-align: right">
+      <p style="font-weight: 600;" id="topbarUser">--</p>
+      <p style="font-size: 12px; color: var(--text-muted);" id="teacherDept">CED</p>
+    </div>
   </div>
 
-  <div class="content">
-
-    <!-- MY SUBJECTS PANEL -->
-    <div class="panel active" id="panel-subjects">
-      <div class="profile-card">
-        <div class="profile-avatar" id="teacherAvatar">—</div>
-        <div class="profile-info">
-          <h2 id="teacherName">Loading...</h2>
-          <p id="teacherDept">—</p>
+  <!-- OVERVIEW PANEL -->
+  <div class="panel active" id="panel-overview">
+    <div class="content-glass">
+      <div class="teacher-profile">
+        <div class="teacher-avatar" id="teacherAvatar">?</div>
+        <div class="teacher-info">
+          <h3 id="teacherName">Loading...</h3>
+          <p id="teacherDeptDetail">Department</p>
         </div>
       </div>
+      <h3 style="margin-bottom: 20px;">Current Workload</h3>
+      <div class="subject-grid" id="subjectGrid"></div>
+    </div>
+  </div>
 
-      <p class="section-label">Assigned Subjects</p>
-      <div class="subject-grid" id="subjectGrid">
-        <div class="empty-state">Loading subjects...</div>
-      </div>
+  <!-- GRADES PANEL -->
+  <div class="panel" id="panel-grades">
+    <div class="content-glass">
+      <h3 style="margin-bottom: 15px;">Select Class to Grade</h3>
+      <div class="subject-grid" id="gradeSubjectGrid"></div>
+    </div>
+    
+    <div id="studentGradeSection" style="display:none;" class="content-glass">
+      <h3 id="gradeTableTitle" style="color: var(--maroon); margin-bottom: 10px;">Class List</h3>
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;" id="gradeSchoolYear"></p>
+      <table>
+        <thead>
+          <tr>
+            <th>Student ID</th>
+            <th>Full Name</th>
+            <th>Year</th>
+            <th>Current Grade</th>
+            <th>Status</th>
+            <th>Input Grade</th>
+            <th>Action</th>
+           </tr>
+        </thead>
+        <tbody id="gradeTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ADVISING PANEL -->
+  <div class="panel" id="panel-advising">
+    <div class="content-glass">
+      <h3 style="margin-bottom: 20px;">Pending Advising Reviews</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>ID Number</th>
+            <th>Name</th>
+            <th>Course</th>
+            <th>Year</th>
+            <th>Submitted</th>
+            <th>Action</th>
+           </tr>
+        </thead>
+        <tbody id="advisingTableBody"></tbody>
+      </table>
     </div>
 
-    <!-- ENTER GRADES PANEL -->
-    <div class="panel" id="panel-grades">
-      <p class="section-label" style="margin-bottom: 1rem;">Select a subject to view enrolled students</p>
-
-      <div class="subject-grid" id="gradeSubjectGrid">
-        <div class="empty-state">Loading subjects...</div>
-      </div>
-
-      <div id="studentGradeSection" style="display:none;">
-        <div class="table-card">
-          <div class="table-header">
-            <h3 id="gradeTableTitle">Students</h3>
-            <span style="font-size: 12px; color: var(--gray-500);" id="gradeSchoolYear"></span>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Student No.</th>
-                <th>Name</th>
-                <th>Year</th>
-                <th>Current Grade</th>
-                <th>Status</th>
-                <th>Enter Grade</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="gradeTableBody">
-              <tr><td colspan="7" class="empty-state">Select a subject above.</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-          <!-- ADVISING QUEUE PANEL -->
-    <div class="panel" id="panel-advising">
-    <p class="section-label" style="margin-bottom: 1rem;">Students pending advising review</p>
-    <div class="table-card">
-    <div class="table-header">
-      <h3>Advising Queue</h3>
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Student No.</th>
-          <th>Name</th>
-          <th>Course</th>
-          <th>Year</th>
-          <th>Submitted</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="advisingTableBody">
-        <tr><td colspan="6" class="empty-state">Loading...</td></tr>
-      </tbody>
-    </table>
-    </div>
-
-    <div id="advisingSubjectSection" style="display:none; margin-top: 1.5rem;">
-    <div class="table-card">
-      <div class="table-header">
-        <h3 id="advisingSubjectTitle">Subjects</h3>
-        <div style="display:flex; gap:8px;">
-          <button class="btn-save" id="approveBtn" onclick="approveAdvising()">Approve Enrollment</button>
-        </div>
+    <div id="advisingSubjectSection" style="display:none;" class="content-glass">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3 id="advisingSubjectTitle">Requested Curriculum</h3>
+        <button class="btn-action" id="approveBtn" onclick="approveAdvising()">Approve Enrollment</button>
       </div>
       <table>
         <thead>
           <tr>
             <th>Code</th>
-            <th>Subject</th>
+            <th>Subject Name</th>
             <th>Units</th>
             <th>Type</th>
             <th>Status</th>
-          </tr>
+           </tr>
         </thead>
-        <tbody id="advisingSubjectBody">
-        </tbody>
+        <tbody id="advisingSubjectBody"></tbody>
       </table>
     </div>
-    </div>
-    </div>
+  </div>
 
-    <!-- SEND NOTICE PANEL -->
-    <div class="panel" id="panel-notices">
-      <div style="background: var(--white); border: 1px solid var(--gray-100); border-radius: 8px; padding: 2rem; max-width: 500px;">
-        <p class="section-label" style="margin-bottom: 1rem;">Send a notice to a student</p>
-          <div style="display:flex; flex-direction:column; gap:10px;">
-            <div style="display:flex; flex-direction:column; gap:6px;">
-            <label style="font-size:12px; font-weight:500; text-transform:uppercase; letter-spacing:0.06em; color:var(--maroon-dark);">Student Number</label>
-            <input type="text" id="notice-student-search" placeholder="Enter student number..." style="padding:10px 12px; font-family:inherit; font-size:13px; border:1px solid var(--gray-300); border-radius:4px; outline:none;"/>
-            </div>
-              <div style="display:flex; flex-direction:column; gap:6px;">
-              <label style="font-size:12px; font-weight:500; text-transform:uppercase; letter-spacing:0.06em; color:var(--maroon-dark);">Message</label>
-              <textarea id="notice-message" rows="4" placeholder="Type your notice here..." style="padding:10px 12px; font-family:inherit; font-size:13px; border:1px solid var(--gray-300); border-radius:4px; outline:none; resize:vertical;"></textarea>
-              </div>
-                <button class="btn-save" style="align-self:flex-start; padding: 10px 20px;" onclick="sendNotice()">Send Notice</button>
-                  <div id="notice-result" style="display:none; font-size:13px; padding:8px 12px; border-radius:4px;"></div>
-            </div>
-        </div>
+  <!-- NOTICES PANEL -->
+  <div class="panel" id="panel-notices">
+    <div class="content-glass">
+      <h3 style="margin-bottom: 20px; color: var(--maroon);">Send Student Notification</h3>
+      <div style="display: flex; flex-direction: column; gap: 15px;">
+        <input type="text" id="notice-student-search" class="grade-input" style="width: 20%; text-align: left; padding: 12px;" placeholder="Student ID Number">
+        <textarea id="notice-message" style="width: 100%; padding: 15px; border-radius: 12px; border: 1px solid #ddd; font-family: inherit;" rows="5" placeholder="Your message..."></textarea>
+        <button class="btn-action" style="padding: 12px;" onclick="sendNotice()">Send Announcement</button>
+        <div id="notice-result" style="display: none; padding: 10px; border-radius: 8px; margin-top: 10px;"></div>
       </div>
+    </div>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div id="toast" class="toast"></div>
 
 <script>
 const API = 'http://localhost:5000';
@@ -512,6 +404,7 @@ function showPanel(name, el) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
   el.classList.add('active');
+  document.getElementById('viewTitle').innerText = el.querySelector('span:first-child')?.innerText || el.innerText;
 }
 
 function showToast(msg, type) {
@@ -535,20 +428,22 @@ async function loadTeacher() {
     const initials = teacherData.first_name[0] + teacherData.last_name[0];
     document.getElementById('teacherAvatar').textContent = initials.toUpperCase();
     document.getElementById('teacherName').textContent = `${teacherData.first_name} ${teacherData.last_name}`;
-    document.getElementById('teacherDept').textContent = teacherData.department_name || 'CED';
+    document.getElementById('teacherDeptDetail').textContent = teacherData.department_name || 'College of Engineering';
     document.getElementById('topbarUser').textContent = `${teacherData.first_name} ${teacherData.last_name}`;
+    document.getElementById('teacherDept').textContent = teacherData.department_name || 'CED';
 
     renderSubjectCards('subjectGrid', false);
     renderSubjectCards('gradeSubjectGrid', true);
 
   } catch (err) {
-    console.error(err);
+    console.error('Error loading teacher data:', err);
+    document.getElementById('subjectGrid').innerHTML = '<div class="empty-state">Unable to load subjects.</div>';
   }
 }
 
 function renderSubjectCards(containerId, selectable) {
   const container = document.getElementById(containerId);
-  if (subjectsList.length === 0) {
+  if (!subjectsList || subjectsList.length === 0) {
     container.innerHTML = '<div class="empty-state">No subjects assigned.</div>';
     return;
   }
@@ -556,9 +451,9 @@ function renderSubjectCards(containerId, selectable) {
   container.innerHTML = subjectsList.map(s => `
     <div class="subject-card ${selectable ? 'selectable' : ''}" 
          id="card-${containerId}-${s.id}"
-         ${selectable ? `onclick="selectSubject(${s.id}, '${s.code} — ${s.name}')"` : ''}>
-      <div class="subject-card-code">${s.code}</div>
-      <div class="subject-card-name">${s.name}</div>
+         ${selectable ? `onclick="selectSubject(${s.id}, '${escapeHtml(s.code)} — ${escapeHtml(s.name)}')"` : ''}>
+      <div class="subject-card-code">${escapeHtml(s.code)}</div>
+      <div class="subject-card-name">${escapeHtml(s.name)}</div>
       <div class="subject-card-units">${s.units} units</div>
     </div>
   `).join('');
@@ -591,35 +486,36 @@ async function selectSubject(subjectId, label) {
     document.getElementById('gradeSchoolYear').textContent = sy ? `${sy} — Semester ${sem}` : '';
 
     document.getElementById('gradeTableBody').innerHTML = students.map(s => {
-    const sType = s.subject_type || 'engineering';
-    return `
-      <tr id="row-${s.id}">
-        <td>${s.student_number}</td>
-        <td>${s.last_name}, ${s.first_name}</td>
-        <td>Year ${s.year_level}</td>
-        <td id="grade-display-${s.id}">${s.grade !== null ? s.grade : '—'}</td>
-        <td id="status-display-${s.id}">
-          ${s.grade !== null 
-            ? `<span class="badge ${s.passed ? 'badge-pass' : 'badge-fail'}">${s.passed ? 'Passed' : 'Failed'}</span>`
-            : `<span class="badge badge-none">No grade</span>`
-          }
-        </td>
-        <td>
-          <input class="grade-input" type="number" id="input-${s.id}" 
-          min="1.0" max="4.0" step="0.25"
-          value="${s.grade !== null ? s.grade : ''}" 
-          placeholder="1.0–4.0"/>
-        </td>
-        <td>
-          <button class="btn-save" onclick="saveGrade(${s.id}, ${subjectId}, '${s.school_year}', ${s.semester}, '${sType}')">
-            Save
-          </button>
-        </td>
-      </tr>
-    `;
-}).join('');
+      const sType = s.subject_type || 'engineering';
+      return `
+        <tr id="row-${s.id}">
+          <td>${escapeHtml(s.student_number)}</td>
+          <td>${escapeHtml(s.last_name)}, ${escapeHtml(s.first_name)}</td>
+          <td>Year ${s.year_level}</td>
+          <td id="grade-display-${s.id}">${s.grade !== null ? s.grade : '—'}</td>
+          <td id="status-display-${s.id}">
+            ${s.grade !== null 
+              ? `<span class="badge ${s.passed ? 'badge-pass' : 'badge-fail'}">${s.passed ? 'Passed' : 'Failed'}</span>`
+              : `<span class="badge badge-none">No grade</span>`
+            }
+          </td>
+          <td>
+            <input class="grade-input" type="number" id="input-${s.id}" 
+            min="1.0" max="4.0" step="0.25"
+            value="${s.grade !== null ? s.grade : ''}" 
+            placeholder="1.0–4.0"/>
+          </td>
+          <td>
+            <button class="btn-save" onclick="saveGrade(${s.id}, ${subjectId}, '${s.school_year}', ${s.semester}, '${sType}')">
+              Save
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
 
   } catch (err) {
+    console.error(err);
     document.getElementById('gradeTableBody').innerHTML = '<tr><td colspan="7" class="empty-state">Could not load students.</td></tr>';
   }
 }
@@ -632,7 +528,7 @@ async function saveGrade(studentId, subjectId, schoolYear, semester, subjectType
   if (isNaN(grade) || grade < 1.0 || grade > 4.0) {
     showToast('Grade must be between 1.0 and 4.0', 'error');
     return;
-}
+  }
 
   try {
     const res = await fetch(`${API}/api/teachers/grade`, {
@@ -672,6 +568,8 @@ async function loadAdvisingQueue() {
     if (requests.length > 0) {
       countEl.textContent = requests.length;
       countEl.style.display = 'inline';
+    } else {
+      countEl.style.display = 'none';
     }
 
     const tbody = document.getElementById('advisingTableBody');
@@ -682,16 +580,16 @@ async function loadAdvisingQueue() {
 
     tbody.innerHTML = requests.map(r => `
       <tr>
-        <td>${r.student_number}</td>
-        <td>${r.last_name}, ${r.first_name}</td>
-        <td>${r.course}</td>
+        <td><strong>${escapeHtml(r.student_number)}</strong></td>
+        <td>${escapeHtml(r.last_name)}, ${escapeHtml(r.first_name)}</td>
+        <td>${escapeHtml(r.course)}</td>
         <td>Year ${r.year_level}</td>
         <td>${new Date(r.submitted_at).toLocaleDateString()}</td>
-        <td><button class="btn-save" onclick="viewAdvisingSubjects(${r.id}, ${r.student_id}, '${r.first_name} ${r.last_name}')">Review</button></td>
+        <td><button class="btn-save" onclick="viewAdvisingSubjects(${r.id}, ${r.student_id}, '${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}')">Review</button></td>
       </tr>
     `).join('');
   } catch (err) {
-    console.error(err);
+    console.error('Error loading advising queue:', err);
   }
 }
 
@@ -713,15 +611,16 @@ async function viewAdvisingSubjects(requestId, studentId, name) {
 
     document.getElementById('advisingSubjectBody').innerHTML = subjects.map(s => `
       <tr>
-        <td style="font-weight:500; color:var(--maroon);">${s.code}</td>
-        <td>${s.name}</td>
+        <td style="font-weight:500; color:var(--maroon);">${escapeHtml(s.code)}</td>
+        <td>${escapeHtml(s.name)}</td>
         <td>${s.units}</td>
-        <td>${s.type}</td>
-        <td><span class="badge badge-none">${s.status.replace(/_/g, ' ')}</span></td>
+        <td>${escapeHtml(s.type)}</td>
+        <td><span class="badge badge-none">${s.status ? s.status.replace(/_/g, ' ') : 'Pending'}</span></td>
       </tr>
     `).join('');
   } catch (err) {
     console.error(err);
+    document.getElementById('advisingSubjectBody').innerHTML = '<tr><td colspan="5" class="empty-state">Could not load subjects.</td></tr>';
   }
 }
 
@@ -769,7 +668,6 @@ async function sendNotice() {
     return;
   }
 
-  // First find student by number
   try {
     const searchRes = await fetch(`${API}/api/students/search?query=${encodeURIComponent(studentNumber)}`, { headers: authHeaders() });
     const students = await searchRes.json();
@@ -792,27 +690,40 @@ async function sendNotice() {
 
     const data = await res.json();
 
-    resultEl.textContent = data.message || 'Notice sent.';
+    resultEl.textContent = data.message || 'Notice sent successfully.';
     resultEl.style.background = 'var(--success-bg)';
     resultEl.style.color = 'var(--success)';
     resultEl.style.display = 'block';
 
     document.getElementById('notice-student-search').value = '';
     document.getElementById('notice-message').value = '';
+    showToast('Notice sent successfully', 'success');
 
   } catch (err) {
     resultEl.textContent = 'Cannot connect to server.';
     resultEl.style.display = 'block';
+    showToast('Cannot connect to server.', 'error');
   }
 }
 
-// ── INIT ───────────────────────────────────────────────────
-if (!getToken() || localStorage.getItem('role') !== 'teacher') {
-  window.location.href = '/login.html';
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/[&<>]/g, function(m) {
+    if (m === '&') return '&amp;';
+    if (m === '<') return '&lt;';
+    if (m === '>') return '&gt;';
+    return m;
+  });
 }
 
+// ── INIT ───────────────────────────────────────────────────
+//I UNCOMMENT RANI
+/*if (!getToken() || localStorage.getItem('role') !== 'teacher') {
+  window.location.href = '/login.html';
+}*/
+
 loadTeacher();
-loadAdvisingQueue(); 
+loadAdvisingQueue();
 </script>
 </body>
 </html>
