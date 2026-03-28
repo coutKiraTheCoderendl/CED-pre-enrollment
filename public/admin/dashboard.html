@@ -1251,16 +1251,6 @@ async function registerStudent() {
     flash('reg-error', `Please fill in: ${missing.join(', ')}`, 'error');
     return;
   }
-  const idPattern = /^\d{2}-\d{1}-\d{5}$/;
-  if (!idPattern.test(body.student_number)) {
-    flash('reg-error', 'Invalid student ID format. Use format: 26-1-00001', 'error');
-    return;
-  } 
-  const namePattern = /^[a-zA-Z\s\-\.]+$/;
-  if (!namePattern.test(body.first_name) || !namePattern.test(body.last_name)) {
-    flash('reg-error', 'Names can only contain letters, spaces, hyphens, and periods.', 'error');
-    return;
-  }
     const idPattern = /^\d{2}-\d{1}-\d{5}$/;
 if (!idPattern.test(body.student_number)) {
     flash('reg-error', 'Invalid student ID format. Use format: 26-1-00001', 'error');
