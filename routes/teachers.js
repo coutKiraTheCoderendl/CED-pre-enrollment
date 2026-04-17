@@ -19,7 +19,7 @@ router.get('/me', protect, restrictTo('teacher'), (req, res) => {
         const teacher = results[0];
 
         const subjectsSQL = `
-            SELECT s.id, s.code, s.name, s.units
+            SELECT s.id, s.code, s.name, s.units  
             FROM teacher_subjects ts
             JOIN subjects s ON ts.subject_id = s.id
             WHERE ts.teacher_id = ?
