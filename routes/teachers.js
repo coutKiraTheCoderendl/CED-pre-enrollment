@@ -3,7 +3,9 @@ const router = express.Router();
 const db = require('../config/db');
 const { protect, restrictTo } = require('../middleware/auth');
 
-// Get teacher's own profile and assigned subjects
+// ============================================================
+//  TEACHER PROFILE
+// ============================================================
 router.get('/me', protect, restrictTo('teacher'), (req, res) => {
     const sql = `
         SELECT t.id, t.first_name, t.last_name, t.email,
@@ -18,44 +20,49 @@ router.get('/me', protect, restrictTo('teacher'), (req, res) => {
 
         const teacher = results[0];
 
-        const subjectsSQL = `
-            SELECT s.id, s.code, s.name, s.units  
-            FROM teacher_subjects ts
-            JOIN subjects s ON ts.subject_id = s.id
-            WHERE ts.teacher_id = ?
-        `;
-        db.query(subjectsSQL, [teacher.id], (err, subjects) => {
-            if (err) return res.status(500).json({ message: 'Database error', error: err });
-            res.json({ teacher, subjects });
-        });
+        db.query(
+            `SELECT s.id, s.code, s.name, s.units  
+             FROM teacher_subjects ts
+             JOIN subjects s ON ts.subject_id = s.id
+             WHERE ts.teacher_id = ?`,
+            [teacher.id],
+            (err, subjects) => {
+                if (err) return res.status(500).json({ message: 'Database error', error: err });
+                res.json({ teacher, subjects });
+            }
+        );
     });
 });
 
-// Get students enrolled in a specific subject
+// ============================================================
+//  GET STUDENTS IN A SUBJECT
+// ============================================================
 router.get('/subject/:subject_id/students', protect, restrictTo('teacher'), (req, res) => {
     const sql = `
-    SELECT st.id, st.student_number, st.first_name, st.last_name,
-           st.year_level, st.course,
-           e.school_year, e.semester,
-           g.grade, g.passed,
-           sub.type as subject_type
-    FROM enrollments e
-    JOIN students st ON e.student_id = st.id
-    JOIN subjects sub ON e.subject_id = sub.id
-    LEFT JOIN grades g ON g.student_id = st.id 
-        AND g.subject_id = e.subject_id
-        AND g.school_year = e.school_year
-        AND g.semester = e.semester
-    WHERE e.subject_id = ?
-    ORDER BY st.last_name, st.first_name
-`;
+        SELECT st.id, st.student_number, st.first_name, st.last_name,
+               st.year_level, st.course,
+               e.school_year, e.semester,
+               g.grade, g.passed,
+               sub.type as subject_type
+        FROM enrollments e
+        JOIN students st ON e.student_id = st.id
+        JOIN subjects sub ON e.subject_id = sub.id
+        LEFT JOIN grades g ON g.student_id = st.id 
+            AND g.subject_id = e.subject_id
+            AND g.school_year = e.school_year
+            AND g.semester = e.semester
+        WHERE e.subject_id = ?
+        ORDER BY st.last_name, st.first_name
+    `;
     db.query(sql, [req.params.subject_id], (err, results) => {
         if (err) return res.status(500).json({ message: 'Database error', error: err });
         res.json(results);
     });
 });
 
-// Submit or update a grade
+// ============================================================
+//  SUBMIT / UPDATE GRADE
+// ============================================================
 router.post('/grade', protect, restrictTo('teacher'), (req, res) => {
     const { student_id, subject_id, grade, school_year, semester, subject_type } = req.body;
 
@@ -64,28 +71,40 @@ router.post('/grade', protect, restrictTo('teacher'), (req, res) => {
     }
 
     const numericGrade = parseFloat(grade);
-    console.log('subject_type received:', subject_type);
-    const isNonMajor = ['GE', 'PE', 'NSTP'].includes(subject_type);
-    const passingGrade = isNonMajor ? 1.0 : 2.0;
-    const passed = numericGrade >= passingGrade ? 1 : 0;
 
-    const sql = `
-        INSERT INTO grades (student_id, subject_id, grade, passed, school_year, semester)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE grade = VALUES(grade), passed = VALUES(passed)
-    `;
-
-    db.query(sql, [student_id, subject_id, numericGrade, passed, school_year, semester], (err) => {
+    // Fetch student's year level first so we can apply correct passing threshold
+    db.query('SELECT year_level FROM students WHERE id = ?', [student_id], (err, students) => {
         if (err) return res.status(500).json({ message: 'Database error', error: err });
-        res.json({
-            message: 'Grade submitted successfully.',
-            passed: passed === 1 ? 'Passed' : 'Failed',
-            grade: numericGrade
+        if (!students || students.length === 0) return res.status(404).json({ message: 'Student not found.' });
+
+        const year_level = students[0].year_level;
+
+        const isNonMajor = ['GE', 'PE', 'NSTP', 'drawing'].includes(subject_type);
+        // Year 3+ uses 1.8 passing threshold for major subjects, Year 1-2 uses 2.0
+        const passingGrade = isNonMajor ? 1.0 : (year_level >= 3 ? 1.8 : 2.0);
+        const passed = numericGrade >= passingGrade ? 1 : 0;
+
+        const sql = `
+            INSERT INTO grades (student_id, subject_id, grade, passed, school_year, semester)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE grade = VALUES(grade), passed = VALUES(passed)
+        `;
+
+        db.query(sql, [student_id, subject_id, numericGrade, passed, school_year, semester], (err) => {
+            if (err) return res.status(500).json({ message: 'Database error', error: err });
+            res.json({
+                message: 'Grade submitted successfully.',
+                passed: passed === 1 ? 'Passed' : 'Failed',
+                grade: numericGrade,
+                passing_threshold: passingGrade
+            });
         });
     });
 });
 
-// Get all teachers (admin only)
+// ============================================================
+//  GET ALL TEACHERS (admin)
+// ============================================================
 router.get('/all', protect, restrictTo('admin'), (req, res) => {
     const sql = `
         SELECT t.id, t.first_name, t.last_name, t.email,
@@ -102,10 +121,11 @@ router.get('/all', protect, restrictTo('admin'), (req, res) => {
     });
 });
 
-// Get advising requests for this teacher
+// ============================================================
+//  ADVISING REQUESTS
+// ============================================================
 router.get('/advising-requests', protect, restrictTo('teacher'), (req, res) => {
-    const teacherSQL = `SELECT id FROM teachers WHERE user_id = ?`;
-    db.query(teacherSQL, [req.user.id], (err, teachers) => {
+    db.query('SELECT id FROM teachers WHERE user_id = ?', [req.user.id], (err, teachers) => {
         if (err) return res.status(500).json({ message: 'Database error', error: err });
         const teacher = teachers[0];
 
@@ -140,7 +160,7 @@ router.get('/advising-requests/:student_id/subjects', protect, restrictTo('teach
     });
 });
 
-// Approve advising request — marks as officially enrolled
+// Approve advising request
 router.patch('/advising-requests/:request_id/approve', protect, restrictTo('teacher'), (req, res) => {
     const requestId = req.params.request_id;
 
@@ -150,21 +170,18 @@ router.patch('/advising-requests/:request_id/approve', protect, restrictTo('teac
 
         const request = requests[0];
 
-        // Update enrollments to officially_enrolled
         db.query(
             'UPDATE enrollments SET status = "officially_enrolled" WHERE student_id = ? AND school_year = ? AND semester = ? AND status = "submitted_for_advising"',
             [request.student_id, request.school_year, request.semester],
             (err) => {
                 if (err) return res.status(500).json({ message: 'Database error', error: err });
 
-                // Update advising request status
                 db.query(
                     'UPDATE advising_requests SET status = "approved", reviewed_at = NOW() WHERE id = ?',
                     [requestId],
                     (err) => {
                         if (err) return res.status(500).json({ message: 'Database error', error: err });
 
-                        // Create notice for student
                         db.query(
                             'INSERT INTO notices (student_id, type, message) VALUES (?, "f2f_required", ?)',
                             [request.student_id, 'Your enrollment has been approved by your advisor. You are now officially enrolled.'],
@@ -179,7 +196,9 @@ router.patch('/advising-requests/:request_id/approve', protect, restrictTo('teac
     });
 });
 
-// Send notice to a student
+// ============================================================
+//  SEND NOTICE TO STUDENT
+// ============================================================
 router.post('/send-notice', protect, restrictTo('teacher'), (req, res) => {
     const { student_id, message } = req.body;
     if (!student_id || !message) return res.status(400).json({ message: 'Student ID and message required.' });

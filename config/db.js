@@ -24,18 +24,10 @@ const dbConfig = isProd
 let db;
 
 try {
-  db = mysql.createConnection(dbConfig);
-
-  db.connect((err) => {
-    if (err) {
-      console.error('Database connection failed:', err);
-    } else {
-      console.log(`Connected to MySQL (${isProd ? 'Railway' : 'Local'})`);
-    }
-  });
+  db = mysql.createPool(dbConfig);
+  console.log(`Connected to MySQL (${isProd ? 'Railway' : 'Local'})`);
 } catch (err) {
   console.error('DB not initialized:', err);
-  // Dummy object so routes don’t crash
   db = {
     query: (q, params, cb) => {
       console.error('DB query called but DB is not connected.');

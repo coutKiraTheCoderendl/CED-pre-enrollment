@@ -8,17 +8,29 @@ const { protect, restrictTo } = require('../middleware/auth');
 //  TEACHER MANAGEMENT
 // ============================================================
 
-// Register a new teacher (creates user + teacher record)
 router.post('/teachers/register', protect, restrictTo('admin'), async (req, res) => {
     const { first_name, last_name, email, department_id, username, password } = req.body;
+
     if (!first_name || !last_name || !username || !password) {
         return res.status(400).json({ message: 'First name, last name, username, and password are required.' });
     }
 
+    const nameRegex = /^[a-zA-Z\s\-'.]+$/;
+    if (!nameRegex.test(first_name) || !nameRegex.test(last_name)) {
+        return res.status(400).json({ message: 'Names must only contain letters, spaces, hyphens, apostrophes, or periods.' });
+    }
+
+    if (email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ message: 'Invalid email format.' });
+        }
+    }
+
     try {
         const hash = await bcrypt.hash(password, 10);
-
-        db.query('INSERT INTO users (username, password, role) VALUES (?, ?, "teacher")',
+        db.query(
+            'INSERT INTO users (username, password, role) VALUES (?, ?, "teacher")',
             [username, hash],
             (err, result) => {
                 if (err) {
@@ -41,7 +53,6 @@ router.post('/teachers/register', protect, restrictTo('admin'), async (req, res)
     }
 });
 
-// Get all teachers
 router.get('/teachers', protect, restrictTo('admin'), (req, res) => {
     const sql = `
         SELECT t.id, t.first_name, t.last_name, t.email,
@@ -62,7 +73,6 @@ router.get('/teachers', protect, restrictTo('admin'), (req, res) => {
 //  SUBJECT ASSIGNMENT
 // ============================================================
 
-// Get all subjects a teacher is assigned to
 router.get('/teachers/:teacher_id/subjects', protect, restrictTo('admin'), (req, res) => {
     const sql = `
         SELECT s.id, s.code, s.name, s.units, s.type
@@ -77,7 +87,6 @@ router.get('/teachers/:teacher_id/subjects', protect, restrictTo('admin'), (req,
     });
 });
 
-// Assign a subject to a teacher
 router.post('/teachers/:teacher_id/subjects', protect, restrictTo('admin'), (req, res) => {
     const { subject_id } = req.body;
     if (!subject_id) return res.status(400).json({ message: 'subject_id is required.' });
@@ -92,7 +101,6 @@ router.post('/teachers/:teacher_id/subjects', protect, restrictTo('admin'), (req
     );
 });
 
-// Remove a subject from a teacher
 router.delete('/teachers/:teacher_id/subjects/:subject_id', protect, restrictTo('admin'), (req, res) => {
     db.query(
         'DELETE FROM teacher_subjects WHERE teacher_id = ? AND subject_id = ?',
@@ -104,20 +112,39 @@ router.delete('/teachers/:teacher_id/subjects/:subject_id', protect, restrictTo(
     );
 });
 
-// Get all subjects (for dropdown)
 router.get('/subjects', protect, restrictTo('admin'), (req, res) => {
-    const sql = `SELECT id, code, name, units, type FROM subjects ORDER BY code`;
-    db.query(sql, (err, results) => {
+    db.query('SELECT id, code, name, units, type FROM subjects ORDER BY code', (err, results) => {
         if (err) return res.status(500).json({ message: 'Database error', error: err });
         res.json(results);
     });
 });
 
 // ============================================================
-//  SECTIONS (schedule management)
+//  STUDENT ENROLLMENT CLEARANCE (replaces BFO confirm-payment)
 // ============================================================
 
-// Get all sections (optionally filter by school_year/semester)
+// Clear a student for enrollment
+router.patch('/students/:id/clear-enrollment', protect, restrictTo('admin'), (req, res) => {
+    db.query('UPDATE students SET ok_to_enroll = 1 WHERE id = ?', [req.params.id], (err, result) => {
+        if (err) return res.status(500).json({ message: 'Database error', error: err });
+        if (result.affectedRows === 0) return res.status(404).json({ message: 'Student not found.' });
+        res.json({ message: 'Student cleared for enrollment.' });
+    });
+});
+
+// Revoke a student's enrollment clearance
+router.patch('/students/:id/unclear-enrollment', protect, restrictTo('admin'), (req, res) => {
+    db.query('UPDATE students SET ok_to_enroll = 0 WHERE id = ?', [req.params.id], (err, result) => {
+        if (err) return res.status(500).json({ message: 'Database error', error: err });
+        if (result.affectedRows === 0) return res.status(404).json({ message: 'Student not found.' });
+        res.json({ message: 'Student enrollment clearance revoked.' });
+    });
+});
+
+// ============================================================
+//  SECTIONS
+// ============================================================
+
 router.get('/sections', protect, restrictTo('admin'), (req, res) => {
     const { school_year, semester } = req.query;
     let sql = `
@@ -140,17 +167,14 @@ router.get('/sections', protect, restrictTo('admin'), (req, res) => {
     });
 });
 
-// Create a section with schedule
 router.post('/sections', protect, restrictTo('admin'), (req, res) => {
     const { subject_id, teacher_id, section_code, capacity, day, time_start, time_end, room, school_year, semester } = req.body;
     if (!subject_id || !section_code || !school_year || !semester) {
         return res.status(400).json({ message: 'subject_id, section_code, school_year, and semester are required.' });
     }
-    const sql = `
-        INSERT INTO sections (subject_id, teacher_id, section_code, capacity, day, time_start, time_end, room, school_year, semester)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    db.query(sql, [subject_id, teacher_id || null, section_code, capacity || 40, day || null, time_start || null, time_end || null, room || null, school_year, semester],
+    db.query(
+        'INSERT INTO sections (subject_id, teacher_id, section_code, capacity, day, time_start, time_end, room, school_year, semester) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [subject_id, teacher_id || null, section_code, capacity || 40, day || null, time_start || null, time_end || null, room || null, school_year, semester],
         (err, result) => {
             if (err) return res.status(500).json({ message: 'Database error', error: err });
             res.status(201).json({ message: 'Section created.', section_id: result.insertId });
@@ -158,14 +182,11 @@ router.post('/sections', protect, restrictTo('admin'), (req, res) => {
     );
 });
 
-// Update a section's schedule
 router.patch('/sections/:section_id', protect, restrictTo('admin'), (req, res) => {
     const { teacher_id, section_code, capacity, day, time_start, time_end, room } = req.body;
-    const sql = `
-        UPDATE sections SET teacher_id = ?, section_code = ?, capacity = ?, day = ?, time_start = ?, time_end = ?, room = ?
-        WHERE id = ?
-    `;
-    db.query(sql, [teacher_id || null, section_code, capacity || 40, day || null, time_start || null, time_end || null, room || null, req.params.section_id],
+    db.query(
+        'UPDATE sections SET teacher_id = ?, section_code = ?, capacity = ?, day = ?, time_start = ?, time_end = ?, room = ? WHERE id = ?',
+        [teacher_id || null, section_code, capacity || 40, day || null, time_start || null, time_end || null, room || null, req.params.section_id],
         (err) => {
             if (err) return res.status(500).json({ message: 'Database error', error: err });
             res.json({ message: 'Section updated.' });
@@ -173,19 +194,58 @@ router.patch('/sections/:section_id', protect, restrictTo('admin'), (req, res) =
     );
 });
 
-// Delete a section
+// Delete a section — nullify FK first, then delete (wrapped in transaction)
 router.delete('/sections/:section_id', protect, restrictTo('admin'), (req, res) => {
-    // Remove section reference from enrollments first
-    db.query('UPDATE enrollments SET section_id = NULL WHERE section_id = ?', [req.params.section_id], (err) => {
-        if (err) return res.status(500).json({ message: 'Database error', error: err });
-        db.query('DELETE FROM sections WHERE id = ?', [req.params.section_id], (err) => {
-            if (err) return res.status(500).json({ message: 'Database error', error: err });
-            res.json({ message: 'Section deleted.' });
+    db.getConnection((err, connection) => {
+        if (err) return res.status(500).json({ message: 'Database connection error', error: err });
+
+        connection.beginTransaction((err) => {
+            if (err) {
+                connection.release();
+                return res.status(500).json({ message: 'Transaction error', error: err });
+            }
+
+            connection.query(
+                'UPDATE enrollments SET section_id = NULL WHERE section_id = ?',
+                [req.params.section_id],
+                (err) => {
+                    if (err) {
+                        return connection.rollback(() => {
+                            connection.release();
+                            res.status(500).json({ message: 'Error removing section from enrollments', error: err });
+                        });
+                    }
+
+                    connection.query(
+                        'DELETE FROM sections WHERE id = ?',
+                        [req.params.section_id],
+                        (err, result) => {
+                            if (err) {
+                                return connection.rollback(() => {
+                                    connection.release();
+                                    res.status(500).json({ message: 'Error deleting section', error: err });
+                                });
+                            }
+                            if (result.affectedRows === 0) {
+                                return connection.rollback(() => {
+                                    connection.release();
+                                    res.status(404).json({ message: 'Section not found.' });
+                                });
+                            }
+
+                            connection.commit((err) => {
+                                connection.release();
+                                if (err) return res.status(500).json({ message: 'Commit error', error: err });
+                                res.json({ message: 'Section deleted successfully.' });
+                            });
+                        }
+                    );
+                }
+            );
         });
     });
 });
 
-// Assign a student's enrollment to a section
 router.patch('/enrollments/:enrollment_id/section', protect, restrictTo('admin'), (req, res) => {
     const { section_id } = req.body;
     db.query('UPDATE enrollments SET section_id = ? WHERE id = ?', [section_id, req.params.enrollment_id], (err) => {
@@ -198,14 +258,12 @@ router.patch('/enrollments/:enrollment_id/section', protect, restrictTo('admin')
 //  NOTICES
 // ============================================================
 
-// Send notice to a student
 router.post('/notices/student', protect, restrictTo('admin'), (req, res) => {
     const { student_id, message, type } = req.body;
     if (!student_id || !message) return res.status(400).json({ message: 'student_id and message are required.' });
-    const noticeType = type || 'f2f_required';
     db.query(
         'INSERT INTO notices (student_id, type, message) VALUES (?, ?, ?)',
-        [student_id, noticeType, message],
+        [student_id, type || 'f2f_required', message],
         (err) => {
             if (err) return res.status(500).json({ message: 'Database error', error: err });
             res.json({ message: 'Notice sent to student.' });
@@ -213,32 +271,28 @@ router.post('/notices/student', protect, restrictTo('admin'), (req, res) => {
     );
 });
 
-// Send notice to all students of a teacher (via teacher_subjects)
 router.post('/notices/teacher-students', protect, restrictTo('admin'), (req, res) => {
     const { teacher_id, message } = req.body;
     if (!teacher_id || !message) return res.status(400).json({ message: 'teacher_id and message are required.' });
 
-    // Get all students enrolled in this teacher's subjects
-    const sql = `
-        SELECT DISTINCT e.student_id
-        FROM enrollments e
-        JOIN teacher_subjects ts ON e.subject_id = ts.subject_id
-        WHERE ts.teacher_id = ?
-        AND e.status NOT IN ('dropped', 'conflict_removed')
-    `;
-    db.query(sql, [teacher_id], (err, students) => {
-        if (err) return res.status(500).json({ message: 'Database error', error: err });
-        if (students.length === 0) return res.json({ message: 'No students found for this teacher.' });
-
-        const values = students.map(s => [s.student_id, 'f2f_required', message]);
-        db.query('INSERT INTO notices (student_id, type, message) VALUES ?', [values], (err) => {
+    db.query(
+        `SELECT DISTINCT e.student_id FROM enrollments e
+         JOIN teacher_subjects ts ON e.subject_id = ts.subject_id
+         WHERE ts.teacher_id = ? AND e.status NOT IN ('dropped', 'conflict_removed')`,
+        [teacher_id],
+        (err, students) => {
             if (err) return res.status(500).json({ message: 'Database error', error: err });
-            res.json({ message: `Notice sent to ${students.length} student(s).` });
-        });
-    });
+            if (students.length === 0) return res.json({ message: 'No students found for this teacher.' });
+
+            const values = students.map(s => [s.student_id, 'f2f_required', message]);
+            db.query('INSERT INTO notices (student_id, type, message) VALUES ?', [values], (err) => {
+                if (err) return res.status(500).json({ message: 'Database error', error: err });
+                res.json({ message: `Notice sent to ${students.length} student(s).` });
+            });
+        }
+    );
 });
 
-// Get all notices (admin view, with student info)
 router.get('/notices', protect, restrictTo('admin'), (req, res) => {
     const sql = `
         SELECT n.id, n.type, n.message, n.resolved, n.created_at,
@@ -254,7 +308,6 @@ router.get('/notices', protect, restrictTo('admin'), (req, res) => {
     });
 });
 
-// Mark notice resolved
 router.patch('/notices/:notice_id/resolve', protect, restrictTo('admin'), (req, res) => {
     db.query('UPDATE notices SET resolved = 1 WHERE id = ?', [req.params.notice_id], (err) => {
         if (err) return res.status(500).json({ message: 'Database error', error: err });
@@ -266,7 +319,6 @@ router.patch('/notices/:notice_id/resolve', protect, restrictTo('admin'), (req, 
 //  GRADES (admin view)
 // ============================================================
 
-// Get all grades for a student
 router.get('/students/:student_id/grades', protect, restrictTo('admin'), (req, res) => {
     const sql = `
         SELECT g.id, g.grade, g.passed, g.school_year, g.semester,
@@ -282,7 +334,6 @@ router.get('/students/:student_id/grades', protect, restrictTo('admin'), (req, r
     });
 });
 
-// Get grades summary for all students (admin)
 router.get('/grades/all', protect, restrictTo('admin'), (req, res) => {
     const sql = `
         SELECT g.id, g.grade, g.passed, g.school_year, g.semester,
@@ -300,65 +351,111 @@ router.get('/grades/all', protect, restrictTo('admin'), (req, res) => {
 });
 
 // ============================================================
-//  MANUAL SUBJECT ENROLLMENT (shiftees / admin override)
+//  MANUAL ENROLLMENT (shiftees / admin override)
 // ============================================================
 
-// Manually enroll a student in a subject
 router.post('/students/:student_id/enroll', protect, restrictTo('admin'), (req, res) => {
     const { subject_id, school_year, semester, section_id } = req.body;
     if (!subject_id || !school_year || !semester) {
         return res.status(400).json({ message: 'subject_id, school_year, and semester are required.' });
     }
 
-    const sql = `
-        INSERT INTO enrollments (student_id, subject_id, school_year, semester, status, section_id)
-        VALUES (?, ?, ?, ?, 'manually_added', ?)
-        ON DUPLICATE KEY UPDATE status = 'manually_added', section_id = VALUES(section_id)
-    `;
-    db.query(sql, [req.params.student_id, subject_id, school_year, semester, section_id || null], (err) => {
-        if (err) return res.status(500).json({ message: 'Database error', error: err });
-
-        // Also mark student as officially_enrolled if they were shiftee
-        db.query(
-            'UPDATE students SET status = "irregular" WHERE id = ? AND type = "shiftee"',
-            [req.params.student_id],
-            () => {}
-        );
-        res.json({ message: 'Student enrolled in subject.' });
-    });
+    db.query(
+        `INSERT INTO enrollments (student_id, subject_id, school_year, semester, status, section_id)
+         VALUES (?, ?, ?, ?, 'manually_added', ?)
+         ON DUPLICATE KEY UPDATE status = 'manually_added', section_id = VALUES(section_id)`,
+        [req.params.student_id, subject_id, school_year, semester, section_id || null],
+        (err) => {
+            if (err) return res.status(500).json({ message: 'Database error', error: err });
+            db.query(
+                'UPDATE students SET status = "irregular" WHERE id = ? AND type = "shiftee"',
+                [req.params.student_id],
+                () => {}
+            );
+            res.json({ message: 'Student enrolled in subject.' });
+        }
+    );
 });
 
-// Drop a student from a subject (admin)
 router.delete('/students/:student_id/enroll/:subject_id', protect, restrictTo('admin'), (req, res) => {
-    const sql = `
-        UPDATE enrollments SET status = 'dropped'
-        WHERE student_id = ? AND subject_id = ?
-    `;
-    db.query(sql, [req.params.student_id, req.params.subject_id], (err, result) => {
-        if (err) return res.status(500).json({ message: 'Database error', error: err });
-        if (result.affectedRows === 0) return res.status(404).json({ message: 'Enrollment not found.' });
-        res.json({ message: 'Subject dropped.' });
-    });
+    db.query(
+        'UPDATE enrollments SET status = "dropped" WHERE student_id = ? AND subject_id = ?',
+        [req.params.student_id, req.params.subject_id],
+        (err, result) => {
+            if (err) return res.status(500).json({ message: 'Database error', error: err });
+            if (result.affectedRows === 0) return res.status(404).json({ message: 'Enrollment not found.' });
+            res.json({ message: 'Subject dropped.' });
+        }
+    );
 });
 
-// Get available subjects not yet enrolled by a student this term
 router.get('/students/:student_id/available-subjects', protect, restrictTo('admin'), (req, res) => {
     const { school_year, semester } = req.query;
     if (!school_year || !semester) return res.status(400).json({ message: 'school_year and semester are required.' });
 
-    const sql = `
-        SELECT s.id, s.code, s.name, s.units, s.type
-        FROM subjects s
-        WHERE s.id NOT IN (
-            SELECT subject_id FROM enrollments
-            WHERE student_id = ? AND school_year = ? AND semester = ?
-            AND status NOT IN ('dropped', 'conflict_removed')
-        )
-        ORDER BY s.code
-    `;
-    db.query(sql, [req.params.student_id, school_year, semester], (err, results) => {
-        if (err) return res.status(500).json({ message: 'Database error', error: err });
-        res.json(results);
+    db.query(
+        `SELECT s.id, s.code, s.name, s.units, s.type FROM subjects s
+         WHERE s.id NOT IN (
+             SELECT subject_id FROM enrollments
+             WHERE student_id = ? AND school_year = ? AND semester = ?
+             AND status NOT IN ('dropped', 'conflict_removed')
+         ) ORDER BY s.code`,
+        [req.params.student_id, school_year, semester],
+        (err, results) => {
+            if (err) return res.status(500).json({ message: 'Database error', error: err });
+            res.json(results);
+        }
+    );
+});
+
+// ============================================================
+//  DELETE STUDENT (admin)
+// ============================================================
+router.delete('/students/:id', protect, restrictTo('admin'), (req, res) => {
+    const student_id = req.params.id;
+
+    db.getConnection((err, connection) => {
+        if (err) return res.status(500).json({ message: 'Database connection error', error: err });
+
+        connection.beginTransaction((err) => {
+            if (err) {
+                connection.release();
+                return res.status(500).json({ message: 'Transaction error', error: err });
+            }
+
+            // Delete in FK-safe order
+            const deleteSteps = [
+                'DELETE FROM advising_requests WHERE student_id = ?',
+                'DELETE FROM subject_change_requests WHERE student_id = ?',
+                'DELETE FROM notices WHERE student_id = ?',
+                'DELETE FROM grades WHERE student_id = ?',
+                'DELETE FROM enrollments WHERE student_id = ?',
+                'DELETE FROM users WHERE student_id = ?',
+                'DELETE FROM students WHERE id = ?',
+            ];
+
+            const runStep = (index) => {
+                if (index === deleteSteps.length) {
+                    return connection.commit((err) => {
+                        connection.release();
+                        if (err) return res.status(500).json({ message: 'Commit error', error: err });
+                        res.json({ message: 'Student deleted successfully.' });
+                    });
+                }
+
+                connection.query(deleteSteps[index], [student_id], (err) => {
+                    if (err) {
+                        return connection.rollback(() => {
+                            connection.release();
+                            res.status(500).json({ message: `Error at step ${index}`, error: err });
+                        });
+                    }
+                    runStep(index + 1);
+                });
+            };
+
+            runStep(0);
+        });
     });
 });
 
