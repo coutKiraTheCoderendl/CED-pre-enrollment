@@ -527,8 +527,12 @@
       <div class="glass-card table-card">
         <div class="table-header">
           <h3>Registered Students</h3>
-          <input class="search-input" type="text" placeholder="Search name or ID…" oninput="filterStudents(this.value)"/>
+          <div class="table-header-actions">
+            <button class="btn-action" id="syncItBtn" onclick="syncFromIT()">Sync from IT</button>
+            <input class="search-input" type="text" placeholder="Search name or ID…" oninput="filterStudents(this.value)"/>
+          </div>
         </div>
+        <div class="alert" id="sync-it-msg" style="margin:1rem 1.5rem 0;"></div>
         <table>
           <thead>
             <tr>
@@ -1104,6 +1108,45 @@ async function loadStudents() {
   } catch (err) {
     document.getElementById('studentTableBody').innerHTML =
       `<tr><td colspan="8" class="empty-state">Could not load students.</td></tr>`;
+  }
+}
+
+// ── SYNC CED STUDENTS FROM IT (read-only source) ──
+async function syncFromIT() {
+  const btn = document.getElementById('syncItBtn');
+  const box = document.getElementById('sync-it-msg');
+  btn.disabled = true;
+  btn.textContent = 'Syncing…';
+  box.className = 'alert alert-info';
+  box.style.display = 'block';
+  box.textContent = 'Reading CED students from the IT department…';
+
+  try {
+    const res  = await fetch(`${API}/api/admin/sync-it`, { method: 'POST', headers: authHeaders() });
+    if (res.status === 401 || res.status === 403) { logout(); return; }
+    const data = await res.json();
+
+    if (!res.ok) {
+      box.className = 'alert alert-error';
+      box.style.display = 'block';
+      box.textContent = (data.message || 'Sync failed.') + (data.error ? ' (' + data.error + ')' : '');
+      return;
+    }
+
+    box.className = 'alert alert-success';
+    box.style.display = 'block';
+    box.textContent =
+      `${data.message} Read from IT: ${data.read_from_it}. ` +
+      `Added: ${data.added}. Already existing: ${data.already_existing}.` +
+      (data.no_matching_department ? ` Skipped (unknown program): ${data.no_matching_department}.` : '');
+    loadStudents();   // refresh the table and the stat cards
+  } catch (err) {
+    box.className = 'alert alert-error';
+    box.style.display = 'block';
+    box.textContent = 'Could not reach the server.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sync from IT';
   }
 }
 
