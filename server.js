@@ -39,6 +39,9 @@ catch(err) { console.error('Failed to load teachers route:', err); }
 try { app.use('/api/admin', require('./routes/admin')); } 
 catch(err) { console.error('Failed to load admin route:', err); }
 
+try { app.use('/api/admin', require('./routes/itSync')); }
+catch(err) { console.error('Failed to load IT sync route:', err); }
+
 // -------------------- Frontend Routes --------------------
 // Serve login page at root
 app.get('/', (req, res) => {
