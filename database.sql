@@ -588,3 +588,28 @@ INSERT INTO faculty_contacts (name, role, department_id, email, phone) VALUES
 ('Engr. Johnson B. Diputado', 'Faculty, Computer Engineering', 1, 'johnsonbdiputado@su.edu.ph', NULL);
 
 SELECT * FROM faculty_contacts;
+-- these are all commands we ran
+-- deleting the BFO role
+ALTER TABLE users 
+MODIFY COLUMN role ENUM('student', 'admin', 'teacher') NOT NULL;
+
+ALTER TABLE enrollments 
+DROP FOREIGN KEY enrollments_ibfk_3;
+
+ALTER TABLE enrollments 
+ADD CONSTRAINT enrollments_ibfk_3 
+FOREIGN KEY (section_id) REFERENCES sections(id) 
+ON DELETE SET NULL;
+
+SHOW CREATE TABLE enrollments;
+
+ALTER TABLE enrollments 
+DROP FOREIGN KEY enrollments_ibfk_3;
+
+ALTER TABLE enrollments 
+ADD CONSTRAINT enrollments_ibfk_3 
+FOREIGN KEY (section_id) REFERENCES sections(id) 
+ON DELETE SET NULL;
+
+-- for testing only; remove when done
+SHOW COLUMNS FROM students LIKE 'type';
