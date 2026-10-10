@@ -229,7 +229,7 @@ CREATE TABLE advising_requests (
     school_year VARCHAR(10) NOT NULL,
     semester    TINYINT NOT NULL,
     submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    reviewed_at  TIMESTAMP DEFAULT NULL,
+    reviewed_at  TIMESTAMP NULL DEFAULT NULL,
     FOREIGN KEY (student_id) REFERENCES students(id),
     FOREIGN KEY (teacher_id) REFERENCES teachers(id)
 );
