@@ -133,6 +133,7 @@
   .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
   .btn-remove { padding: 4px 10px; background: var(--error-bg); color: var(--error); border: 1px solid var(--error); border-radius: 6px; cursor: pointer; font-size: 11px; }
+  .section-select { max-width: 240px; padding: 7px 9px; border: 1px solid rgba(0,0,0,0.15); border-radius: 8px; background: #fff; color: var(--text-main); }
 
   .notice-card { background: rgba(255,255,255,0.5); border-left: 4px solid var(--gold); padding: 15px; margin-bottom: 12px; border-radius: 12px; }
   .notice-type { font-weight: 600; font-size: 12px; text-transform: uppercase; color: var(--maroon); margin-bottom: 5px; }
@@ -193,14 +194,15 @@
         <h3>Enrolled Subjects</h3>
         <span style="font-weight: 600; color: var(--maroon);" id="totalUnits">Total: 0 units</span>
       </div>
+      <p style="font-size:12px; color:var(--text-muted);">Choose an available section for each subject. Schedule conflicts are blocked; old students must select a section before submitting for advising.</p>
       <table>
         <thead>
           <tr>
-            <th>Code</th><th>Subject</th><th>Units</th><th>Day/Time</th><th>Status</th><th>Action</th>
+            <th>Code</th><th>Subject</th><th>Units</th><th>Section</th><th>Day/Time</th><th>Status</th><th>Action</th>
           </tr>
         </thead>
         <tbody id="subjectTableBody">
-          <tr><td colspan="6" class="empty-state">Loading subjects...</td></tr>
+          <tr><td colspan="7" class="empty-state">Loading subjects...</td></tr>
         </tbody>
       </table>
 
@@ -242,11 +244,16 @@
 </div>
 
 <script>
-const API = 'http://localhost:5000'; // Updated to new database port
+const API = 'http://localhost:3000';
 
 function getToken() { return localStorage.getItem('token'); }
 function authHeaders() { return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` }; }
 function logout() { localStorage.clear(); window.location.href = '../login.html'; }
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[char]);
+}
 
 function showPanel(name, el) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -263,7 +270,7 @@ async function loadDashboard() {
   try {
     const res = await fetch(`${API}/api/students/me`, { headers: authHeaders() });
     if (res.status === 401 || res.status === 403) { logout(); return; }
-    const { student, subjects, notices } = await res.json();
+    const { student, subjects, availableSections, notices } = await res.json();
 
     // Profile Data
     document.getElementById('profileAvatar').textContent = (student.first_name[0] + student.last_name[0]).toUpperCase();
@@ -281,18 +288,39 @@ async function loadDashboard() {
     // Subjects Table
     const tbody = document.getElementById('subjectTableBody');
     if (subjects.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No subjects enlisted yet.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No subjects enlisted yet.</td></tr>`;
     } else {
-      tbody.innerHTML = subjects.map(s => `
-        <tr>
-          <td class="subject-code">${s.code}</td>
-          <td>${s.name}</td>
-          <td>${s.units}</td>
-          <td>${s.day || '—'} ${s.time_start ? s.time_start.substring(0,5) : ''}</td>
-          <td><span class="badge badge-${s.status === 'officially_enrolled' ? 'enrolled' : s.status === 'submitted_for_advising' ? 'submitted' : 'pre'}">${s.status.replace(/_/g, ' ')}</span></td>
-          <td>${s.status === 'pre_enlisted' ? `<button class="btn-remove" onclick="removeSubject(${s.enrollment_id})">Remove</button>` : '—'}</td>
-        </tr>
-      `).join('');
+      tbody.innerHTML = subjects.map(s => {
+        const choices = availableSections.filter(section =>
+          Number(section.subject_id) === Number(s.subject_id) &&
+          section.school_year === s.school_year &&
+          Number(section.semester) === Number(s.semester)
+        );
+        const canChoose = ['auto_enrolled', 'pre_enlisted'].includes(s.status);
+        const sectionCell = canChoose && choices.length
+          ? `<select class="section-select" aria-label="Choose section for ${escapeHtml(s.code)}" onchange="changeSection(${Number(s.enrollment_id)}, this.value)">
+              <option value="">Choose a section…</option>
+              ${choices.map(section => {
+                const schedule = [section.day, section.time_start ? section.time_start.substring(0, 5) : '', section.room]
+                  .filter(Boolean).join(' · ');
+                const currentSelection = Number(s.section_id) === Number(section.section_id);
+                const isFull = Number(section.enrolled) >= Number(section.capacity);
+                return `<option value="${Number(section.section_id)}" ${currentSelection ? 'selected' : ''} ${isFull && !currentSelection ? 'disabled' : ''}>${escapeHtml(section.section_code)}${schedule ? ` — ${escapeHtml(schedule)}` : ''}${isFull ? ' (Full)' : ''}</option>`;
+              }).join('')}
+            </select>`
+          : escapeHtml(s.section_code || '—');
+        return `
+          <tr>
+            <td class="subject-code">${escapeHtml(s.code)}</td>
+            <td>${escapeHtml(s.name)}</td>
+            <td>${Number(s.units)}</td>
+            <td>${sectionCell}</td>
+            <td>${escapeHtml(s.day || '—')} ${s.time_start ? escapeHtml(s.time_start.substring(0,5)) : ''}</td>
+            <td><span class="badge badge-${s.status === 'officially_enrolled' ? 'enrolled' : s.status === 'submitted_for_advising' ? 'submitted' : 'pre'}">${escapeHtml(s.status.replace(/_/g, ' '))}</span></td>
+            <td>${s.status === 'pre_enlisted' ? `<button class="btn-remove" onclick="removeSubject(${Number(s.enrollment_id)})">Remove</button>` : '—'}</td>
+          </tr>
+        `;
+      }).join('');
       document.getElementById('totalUnits').textContent = `Total: ${subjects.reduce((sum, s) => sum + s.units, 0)} units`;
     }
 
@@ -330,15 +358,39 @@ async function loadDashboard() {
 async function beginEnrollment() {
   try {
     const res = await fetch(`${API}/api/students/enroll-old`, { method: 'POST', headers: authHeaders() });
-    if (res.ok) loadDashboard();
+    const data = await res.json();
+    if (!res.ok) { alert(data.message || 'Could not begin enrollment.'); return; }
+    loadDashboard();
   } catch (err) { alert('Connection error'); }
+}
+
+async function changeSection(enrollmentId, sectionId) {
+  try {
+    const res = await fetch(`${API}/api/students/enrollments/${enrollmentId}/section`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ section_id: sectionId || null })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.message || 'Could not select that section.');
+      loadDashboard();
+      return;
+    }
+    loadDashboard();
+  } catch (err) {
+    alert('Connection error while saving your section.');
+    loadDashboard();
+  }
 }
 
 async function submitForAdvising() {
   if (!confirm('Submit for advisor review?')) return;
   try {
     const res = await fetch(`${API}/api/students/submit-advising`, { method: 'POST', headers: authHeaders() });
-    if (res.ok) loadDashboard();
+    const data = await res.json();
+    if (!res.ok) { alert(data.message || 'Could not submit for advising.'); return; }
+    loadDashboard();
   } catch (err) { alert('Connection error'); }
 }
 
