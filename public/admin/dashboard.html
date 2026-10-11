@@ -610,8 +610,9 @@
             <label>Student Type</label>
             <select id="reg-type">
               <option value="">Select type...</option>
+              <option value="old">Old Student</option>
               <option value="shiftee">Shiftee</option>
-            </select>
+            </select>                                   
           </div>
         </div>
         <div class="form-actions">
@@ -1045,7 +1046,7 @@
 
 <!-- ══════════════════ SCRIPT ══════════════════ -->
 <script>
-const API = 'http://localhost:3000';
+const API = 'http://localhost:5000';
 let allStudents  = [];
 let allGrades    = [];
 let allTeachers  = [];
@@ -1174,7 +1175,12 @@ function renderStudents(students) {
       <td>Year ${s.year_level}</td>
       <td><span class="badge badge-${s.type}">${s.type}</span></td>
       <td><span class="badge badge-${s.status || 'gray'}">${s.status || '—'}</span></td>
-      <td><span class="badge ${s.ok_to_enroll ? 'badge-ok' : 'badge-notok'}">${s.ok_to_enroll ? 'Cleared' : 'Pending'}</span></td>
+      <td>
+  ${s.ok_to_enroll
+    ? `<button class="btn-action danger" onclick="toggleClearance(${s.id}, 0)">Revoke</button>`
+    : `<button class="btn-action" style="background:var(--success);" onclick="toggleClearance(${s.id}, 1)">Clear</button>`
+  }
+</td>
       <td style="display:flex; gap:4px; flex-wrap:wrap;">
         <button class="btn-action" onclick="viewEnrollments(${s.id},'${s.first_name} ${s.last_name}')">Subjects</button>
         <button class="btn-action secondary" onclick="viewStudentGrades(${s.id},'${s.first_name} ${s.last_name}')">Grades</button>
@@ -1209,6 +1215,21 @@ async function deleteStudent(studentId) {
     alert(`${studentName} was deleted.`);
   } catch (err) {
     alert('Could not connect to the server. The student was not confirmed as deleted.');
+  }
+}
+
+async function toggleClearance(studentId, clear) {
+  const endpoint = clear ? 'clear-enrollment' : 'unclear-enrollment';
+  try {
+    const res = await fetch(`${API}/api/admin/students/${studentId}/${endpoint}`, {
+      method: 'PATCH',
+      headers: authHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.message || 'Failed.'); return; }
+    loadStudents();
+  } catch (err) {
+    alert('Could not connect to server.');
   }
 }
 

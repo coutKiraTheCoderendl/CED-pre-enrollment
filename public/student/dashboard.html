@@ -194,7 +194,7 @@
         <h3>Enrolled Subjects</h3>
         <span style="font-weight: 600; color: var(--maroon);" id="totalUnits">Total: 0 units</span>
       </div>
-      <p style="font-size:12px; color:var(--text-muted);">Choose an available section for each subject. Schedule conflicts are blocked; old students must select a section before submitting for advising.</p>
+      <p style="font-size:12px; color:var(--text-muted);">Your enrolled subjects for this semester are listed below. You may remove pre-enlisted subjects before submitting for advising.</p>
       <table>
         <thead>
           <tr>
@@ -244,7 +244,7 @@
 </div>
 
 <script>
-const API = 'http://localhost:3000';
+const API = 'http://localhost:5000';
 
 function getToken() { return localStorage.getItem('token'); }
 function authHeaders() { return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` }; }
@@ -270,7 +270,7 @@ async function loadDashboard() {
   try {
     const res = await fetch(`${API}/api/students/me`, { headers: authHeaders() });
     if (res.status === 401 || res.status === 403) { logout(); return; }
-    const { student, subjects, availableSections, notices } = await res.json();
+    const { student, subjects, notices } = await res.json();
 
     // Profile Data
     document.getElementById('profileAvatar').textContent = (student.first_name[0] + student.last_name[0]).toUpperCase();
@@ -282,7 +282,7 @@ async function loadDashboard() {
     // Badges
     document.getElementById('profileBadges').innerHTML = `
       <span class="badge badge-gray">${student.type}</span>
-      <span class="badge ${student.ok_to_enroll ? 'badge-ok' : 'badge-notok'}">${student.ok_to_enroll ? 'Cleared' : 'Payment Pending'}</span>
+      <span class="badge ${student.ok_to_enroll ? 'badge-ok' : 'badge-notok'}">${student.ok_to_enroll ? 'Cleared for Enrollment' : 'Pending Admin Clearance'}</span>
     `;
 
     // Subjects Table
@@ -290,37 +290,19 @@ async function loadDashboard() {
     if (subjects.length === 0) {
       tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No subjects enlisted yet.</td></tr>`;
     } else {
-      tbody.innerHTML = subjects.map(s => {
-        const choices = availableSections.filter(section =>
-          Number(section.subject_id) === Number(s.subject_id) &&
-          section.school_year === s.school_year &&
-          Number(section.semester) === Number(s.semester)
-        );
-        const canChoose = ['auto_enrolled', 'pre_enlisted'].includes(s.status);
-        const sectionCell = canChoose && choices.length
-          ? `<select class="section-select" aria-label="Choose section for ${escapeHtml(s.code)}" onchange="changeSection(${Number(s.enrollment_id)}, this.value)">
-              <option value="">Choose a section…</option>
-              ${choices.map(section => {
-                const schedule = [section.day, section.time_start ? section.time_start.substring(0, 5) : '', section.room]
-                  .filter(Boolean).join(' · ');
-                const currentSelection = Number(s.section_id) === Number(section.section_id);
-                const isFull = Number(section.enrolled) >= Number(section.capacity);
-                return `<option value="${Number(section.section_id)}" ${currentSelection ? 'selected' : ''} ${isFull && !currentSelection ? 'disabled' : ''}>${escapeHtml(section.section_code)}${schedule ? ` — ${escapeHtml(schedule)}` : ''}${isFull ? ' (Full)' : ''}</option>`;
-              }).join('')}
-            </select>`
-          : escapeHtml(s.section_code || '—');
-        return `
-          <tr>
-            <td class="subject-code">${escapeHtml(s.code)}</td>
-            <td>${escapeHtml(s.name)}</td>
-            <td>${Number(s.units)}</td>
-            <td>${sectionCell}</td>
-            <td>${escapeHtml(s.day || '—')} ${s.time_start ? escapeHtml(s.time_start.substring(0,5)) : ''}</td>
-            <td><span class="badge badge-${s.status === 'officially_enrolled' ? 'enrolled' : s.status === 'submitted_for_advising' ? 'submitted' : 'pre'}">${escapeHtml(s.status.replace(/_/g, ' '))}</span></td>
-            <td>${s.status === 'pre_enlisted' ? `<button class="btn-remove" onclick="removeSubject(${Number(s.enrollment_id)})">Remove</button>` : '—'}</td>
-          </tr>
-        `;
-      }).join('');
+      tbody.innerHTML = subjects.map(s => `
+  <tr>
+    <td class="subject-code">${escapeHtml(s.code)}</td>
+    <td>${escapeHtml(s.name)}</td>
+    <td>${Number(s.units)}</td>
+    <td>${escapeHtml(s.section_code || '—')}</td>
+    <td>${escapeHtml(s.day || '—')} ${s.time_start ? escapeHtml(s.time_start.substring(0,5)) : ''}</td>
+    <td><span class="badge badge-${s.status === 'officially_enrolled' ? 'enrolled' : s.status === 'submitted_for_advising' ? 'submitted' : 'pre'}">${escapeHtml(s.status.replace(/_/g, ' '))}</span></td>
+    <td>${s.status === 'pre_enlisted' 
+      ? `<button class="btn-remove" onclick="removeSubject(${Number(s.enrollment_id)})">Remove</button>` 
+      : '—'}</td>
+  </tr>
+`).join('');
       document.getElementById('totalUnits').textContent = `Total: ${subjects.reduce((sum, s) => sum + s.units, 0)} units`;
     }
 
@@ -364,25 +346,6 @@ async function beginEnrollment() {
   } catch (err) { alert('Connection error'); }
 }
 
-async function changeSection(enrollmentId, sectionId) {
-  try {
-    const res = await fetch(`${API}/api/students/enrollments/${enrollmentId}/section`, {
-      method: 'PATCH',
-      headers: authHeaders(),
-      body: JSON.stringify({ section_id: sectionId || null })
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      alert(data.message || 'Could not select that section.');
-      loadDashboard();
-      return;
-    }
-    loadDashboard();
-  } catch (err) {
-    alert('Connection error while saving your section.');
-    loadDashboard();
-  }
-}
 
 async function submitForAdvising() {
   if (!confirm('Submit for advisor review?')) return;
@@ -434,7 +397,7 @@ async function loadContacts() {
 }
 
 //I UNCOMMENT RANI
-//if (!getToken() || localStorage.getItem('role') !== 'student') { window.location.href = '/login.html'; }
+if (!getToken() || localStorage.getItem('role') !== 'student') { window.location.href = '/login.html'; }
 loadDashboard();
 </script>
 </body>

@@ -403,7 +403,7 @@
 <div id="toast" class="toast"></div>
 
 <script>
-const API = 'http://localhost:3000';
+const API = 'http://localhost:5000';
 let teacherData = null;
 let subjectsList = [];
 let selectedSubjectId = null;
@@ -778,9 +778,9 @@ function escapeHtml(str) {
 
 // ── INIT ───────────────────────────────────────────────────
 //I UNCOMMENT RANI
-/*if (!getToken() || localStorage.getItem('role') !== 'teacher') {
+if (!getToken() || localStorage.getItem('role') !== 'teacher') {
   window.location.href = '/login.html';
-}*/
+}
 
 loadTeacher();
 loadAdvisingQueue();
