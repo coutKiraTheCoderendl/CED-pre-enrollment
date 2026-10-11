@@ -172,11 +172,18 @@ router.post('/sections', protect, restrictTo('admin'), (req, res) => {
     if (!subject_id || !section_code || !school_year || !semester) {
         return res.status(400).json({ message: 'subject_id, section_code, school_year, and semester are required.' });
     }
+    const validDays = ['Mon/Thu', 'Tue/Fri', 'Wed/Sat', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    if (day && !validDays.includes(day)) {
+        return res.status(400).json({ message: 'Choose a valid section day or day pair.' });
+    }
     db.query(
         'INSERT INTO sections (subject_id, teacher_id, section_code, capacity, day, time_start, time_end, room, school_year, semester) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [subject_id, teacher_id || null, section_code, capacity || 40, day || null, time_start || null, time_end || null, room || null, school_year, semester],
         (err, result) => {
-            if (err) return res.status(500).json({ message: 'Database error', error: err });
+            if (err) {
+                console.error('Section creation failed:', err);
+                return res.status(500).json({ message: 'Could not create section. Check the database schema and section details.' });
+            }
             res.status(201).json({ message: 'Section created.', section_id: result.insertId });
         }
     );
@@ -184,11 +191,19 @@ router.post('/sections', protect, restrictTo('admin'), (req, res) => {
 
 router.patch('/sections/:section_id', protect, restrictTo('admin'), (req, res) => {
     const { teacher_id, section_code, capacity, day, time_start, time_end, room } = req.body;
+    const validDays = ['Mon/Thu', 'Tue/Fri', 'Wed/Sat', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    if (day && !validDays.includes(day)) {
+        return res.status(400).json({ message: 'Choose a valid section day or day pair.' });
+    }
     db.query(
         'UPDATE sections SET teacher_id = ?, section_code = ?, capacity = ?, day = ?, time_start = ?, time_end = ?, room = ? WHERE id = ?',
         [teacher_id || null, section_code, capacity || 40, day || null, time_start || null, time_end || null, room || null, req.params.section_id],
-        (err) => {
-            if (err) return res.status(500).json({ message: 'Database error', error: err });
+        (err, result) => {
+            if (err) {
+                console.error('Section update failed:', err);
+                return res.status(500).json({ message: 'Could not update section. Check the database schema and section details.' });
+            }
+            if (!result.affectedRows) return res.status(404).json({ message: 'Section not found.' });
             res.json({ message: 'Section updated.' });
         }
     );
@@ -412,7 +427,10 @@ router.get('/students/:student_id/available-subjects', protect, restrictTo('admi
 //  DELETE STUDENT (admin)
 // ============================================================
 router.delete('/students/:id', protect, restrictTo('admin'), (req, res) => {
-    const student_id = req.params.id;
+    const student_id = Number(req.params.id);
+    if (!Number.isSafeInteger(student_id) || student_id < 1) {
+        return res.status(400).json({ message: 'A valid student ID is required.' });
+    }
 
     db.getConnection((err, connection) => {
         if (err) return res.status(500).json({ message: 'Database connection error', error: err });
@@ -454,7 +472,22 @@ router.delete('/students/:id', protect, restrictTo('admin'), (req, res) => {
                 });
             };
 
-            runStep(0);
+            connection.query('SELECT id FROM students WHERE id = ? FOR UPDATE', [student_id], (err, students) => {
+                if (err) {
+                    return connection.rollback(() => {
+                        connection.release();
+                        console.error('Could not verify student before deletion:', err);
+                        res.status(500).json({ message: 'Could not verify student before deletion.' });
+                    });
+                }
+                if (students.length === 0) {
+                    return connection.rollback(() => {
+                        connection.release();
+                        res.status(404).json({ message: 'Student not found.' });
+                    });
+                }
+                runStep(0);
+            });
         });
     });
 });
