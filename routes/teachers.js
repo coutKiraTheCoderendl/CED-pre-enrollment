@@ -213,4 +213,34 @@ router.post('/send-notice', protect, restrictTo('teacher'), (req, res) => {
     );
 });
 
+// ============================================================
+//  GET TEACHER'S SECTIONS
+// ============================================================
+router.get('/my-sections', protect, restrictTo('teacher'), (req, res) => {
+    db.query('SELECT id FROM teachers WHERE user_id = ?', [req.user.id], (err, teachers) => {
+        if (err) return res.status(500).json({ message: 'Database error', error: err });
+        if (!teachers || teachers.length === 0) return res.status(404).json({ message: 'Teacher not found.' });
+
+        const teacher_id = teachers[0].id;
+
+        const sql = `
+            SELECT sec.id, sec.section_code, sec.day, sec.time_start, sec.time_end, 
+                   sec.room, sec.capacity, sec.school_year, sec.semester,
+                   s.id as subject_id, s.code as subject_code, s.name as subject_name, s.units,
+                   COUNT(e.id) as enrolled_count
+            FROM sections sec
+            JOIN subjects s ON sec.subject_id = s.id
+            LEFT JOIN enrollments e ON e.section_id = sec.id 
+                AND e.status NOT IN ('dropped', 'conflict_removed')
+            WHERE sec.teacher_id = ?
+            GROUP BY sec.id
+            ORDER BY sec.school_year DESC, sec.semester, s.code
+        `;
+        db.query(sql, [teacher_id], (err, results) => {
+            if (err) return res.status(500).json({ message: 'Database error', error: err });
+            res.json(results);
+        });
+    });
+});
+
 module.exports = router;
