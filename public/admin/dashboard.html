@@ -787,6 +787,9 @@
             <button class="btn-action secondary" onclick="openSectionModal()">+ New Section</button>
           </div>
         </div>
+        <p style="font-size:12px; color:var(--gray-500); margin:0 0 12px;">
+          Add one section per subject and term (for example, sections A, B, and C). Students choose an available section during enrollment.
+        </p>
         <table>
           <thead>
             <tr>
@@ -1042,7 +1045,7 @@
 
 <!-- ══════════════════ SCRIPT ══════════════════ -->
 <script>
-const API = 'http://localhost:5000';
+const API = 'http://localhost:3000';
 let allStudents  = [];
 let allGrades    = [];
 let allTeachers  = [];
@@ -1176,9 +1179,37 @@ function renderStudents(students) {
         <button class="btn-action" onclick="viewEnrollments(${s.id},'${s.first_name} ${s.last_name}')">Subjects</button>
         <button class="btn-action secondary" onclick="viewStudentGrades(${s.id},'${s.first_name} ${s.last_name}')">Grades</button>
         <button class="btn-action secondary" onclick="quickNotice(${s.id},'${s.first_name} ${s.last_name}')">Notice</button>
+        <button class="btn-action danger" onclick="deleteStudent(${Number(s.id)})">Delete</button>
       </td>
     </tr>
   `).join('');
+}
+
+async function deleteStudent(studentId) {
+  const student = allStudents.find(item => Number(item.id) === studentId);
+  if (!student) return;
+
+  const studentName = `${student.first_name} ${student.last_name}`;
+  if (!confirm(`Permanently delete ${studentName} (${student.student_number}) and their enrollment, grade, notice, advising, and account records? This cannot be undone.`)) return;
+
+  try {
+    const res = await fetch(`${API}/api/admin/students/${studentId}`, {
+      method: 'DELETE',
+      headers: authHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.message || 'Could not delete student.');
+      return;
+    }
+
+    allStudents = allStudents.filter(item => Number(item.id) !== studentId);
+    renderStudents(allStudents);
+    updateStats(allStudents);
+    alert(`${studentName} was deleted.`);
+  } catch (err) {
+    alert('Could not connect to the server. The student was not confirmed as deleted.');
+  }
 }
 
 function filterStudents(q) {
@@ -1622,7 +1653,13 @@ async function saveSection() {
 
   const res = await fetch(url, { method, headers: authHeaders(), body: JSON.stringify(body) });
   const data = await res.json();
-  if (!res.ok) { flash('sec-error', data.message, 'error'); return; }
+  if (!res.ok) {
+    const message = res.status === 401 || res.status === 403
+      ? 'Admin permission is required. Sign out and sign back in with an admin account.'
+      : (data.message || 'Could not save section.');
+    flash('sec-error', message, 'error');
+    return;
+  }
   flash('sec-success', data.message);
   setTimeout(() => { closeModal('sectionModal'); loadSections(); }, 1000);
   document.getElementById('sec-subject_id').disabled = false;

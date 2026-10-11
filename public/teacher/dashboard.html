@@ -255,6 +255,9 @@
     <div class="nav-item active" onclick="showPanel('overview', this)">
       <span>My Subjects</span>
     </div>
+    <div class="nav-item" onclick="showPanel('sections', this); loadMySections()">
+    <span>My Sections</span>
+    </div>
     <div class="nav-item" onclick="showPanel('grades', this)">
       <span>Enter Grades</span>
     </div>
@@ -293,6 +296,27 @@
       </div>
       <h3 style="margin-bottom: 20px;">Current Workload</h3>
       <div class="subject-grid" id="subjectGrid"></div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-sections">
+    <div class="content-glass">
+      <h3>My Assigned Sections</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Subject</th>
+            <th>Section</th>
+            <th>Day / Time</th>
+            <th>Room</th>
+            <th>Students</th>
+            <th>School Year / Semester</th>
+          </tr>
+        </thead>
+        <tbody id="mySectionsBody">
+          <tr><td colspan="6" class="empty-state">Select My Sections to load your assignments.</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -379,7 +403,7 @@
 <div id="toast" class="toast"></div>
 
 <script>
-const API = 'http://localhost:5000';
+const API = 'http://localhost:3000';
 let teacherData = null;
 let subjectsList = [];
 let selectedSubjectId = null;
@@ -434,10 +458,46 @@ async function loadTeacher() {
 
     renderSubjectCards('subjectGrid', false);
     renderSubjectCards('gradeSubjectGrid', true);
+    loadMySections();
 
   } catch (err) {
     console.error('Error loading teacher data:', err);
     document.getElementById('subjectGrid').innerHTML = '<div class="empty-state">Unable to load subjects.</div>';
+  }
+}
+
+async function loadMySections() {
+  const tbody = document.getElementById('mySectionsBody');
+  try {
+    const res = await fetch(`${API}/api/teachers/my-sections`, { headers: authHeaders() });
+    if (res.status === 401 || res.status === 403) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Your session is no longer valid. Sign in again as a teacher.</td></tr>';
+      return;
+    }
+    const sections = await res.json();
+    if (!res.ok) throw new Error(sections.message || 'Could not load assigned sections.');
+    if (!sections.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No sections are assigned to you yet. Ask an admin to assign you to a section.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = sections.map(section => {
+      const time = section.time_start
+        ? `${escapeHtml(section.time_start.substring(0, 5))}–${escapeHtml((section.time_end || '').substring(0, 5))}`
+        : 'TBA';
+      return `
+        <tr>
+          <td><strong>${escapeHtml(section.subject_code)}</strong><br>${escapeHtml(section.subject_name)}</td>
+          <td><strong>${escapeHtml(section.section_code)}</strong></td>
+          <td>${escapeHtml(section.day || 'TBA')} ${time}</td>
+          <td>${escapeHtml(section.room || '—')}</td>
+          <td>${Number(section.enrolled_count)} / ${Number(section.capacity)}</td>
+          <td>${escapeHtml(section.school_year)} S${Number(section.semester)}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('Error loading teacher sections:', err);
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Could not load your sections. Please try again.</td></tr>';
   }
 }
 

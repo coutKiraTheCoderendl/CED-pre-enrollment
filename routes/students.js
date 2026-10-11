@@ -94,47 +94,36 @@ router.post('/new', protect, restrictTo('admin'), (req, res) => {
             const currentYear = new Date().getFullYear();
             const school_year = `${currentYear}-${currentYear + 1}`;
 
-            const sectionSQL = `SELECT subject_id, id as section_id FROM sections WHERE school_year = ? AND semester = 1`;
-            db.query(sectionSQL, [school_year], (err, sections) => {
-                if (err) console.error(err);
+            const enrollmentValues = subjects.map(sub => [
+                student_id, sub.subject_id, school_year, 1, 'auto_enrolled', null
+            ]);
 
-                const sectionMap = {};
-                if (sections) sections.forEach(sec => {
-                    if (!sectionMap[sec.subject_id]) sectionMap[sec.subject_id] = sec.section_id;
-                });
+            db.query(
+                'INSERT INTO enrollments (student_id, subject_id, school_year, semester, status, section_id) VALUES ?',
+                [enrollmentValues],
+                (err) => {
+                    if (err) return res.status(500).json({ message: 'Error auto-enrolling subjects', error: err });
 
-                const enrollmentValues = subjects.map(sub => [
-                    student_id, sub.subject_id, school_year, 1, 'auto_enrolled',
-                    sectionMap[sub.subject_id] || null
-                ]);
+                    const bcrypt = require('bcrypt');
+                    bcrypt.hash(student_number, 10, (err, hash) => {
+                        if (err) return res.status(500).json({ message: 'Error creating user account' });
 
-                db.query(
-                    'INSERT INTO enrollments (student_id, subject_id, school_year, semester, status, section_id) VALUES ?',
-                    [enrollmentValues],
-                    (err) => {
-                        if (err) return res.status(500).json({ message: 'Error auto-enrolling subjects', error: err });
-
-                        const bcrypt = require('bcrypt');
-                        bcrypt.hash(student_number, 10, (err, hash) => {
-                            if (err) return res.status(500).json({ message: 'Error creating user account' });
-
-                            db.query(
-                                'INSERT INTO users (username, password, role, student_id) VALUES (?, ?, "student", ?)',
-                                [student_number, hash, student_id],
-                                (err) => {
-                                    if (err) return res.status(500).json({ message: 'Error creating user account' });
-                                    res.status(201).json({
-                                        message: 'Student registered and auto-enrolled successfully',
-                                        student_id,
-                                        school_year,
-                                        enrolled_subjects: subjects.map(s => `${s.code} - ${s.name}`)
-                                    });
-                                }
-                            );
-                        });
-                    }
-                );
-            });
+                        db.query(
+                            'INSERT INTO users (username, password, role, student_id) VALUES (?, ?, "student", ?)',
+                            [student_number, hash, student_id],
+                            (err) => {
+                                if (err) return res.status(500).json({ message: 'Error creating user account' });
+                                res.status(201).json({
+                                    message: 'Student registered and auto-enrolled successfully',
+                                    student_id,
+                                    school_year,
+                                    enrolled_subjects: subjects.map(s => `${s.code} - ${s.name}`)
+                                });
+                            }
+                        );
+                    });
+                }
+            );
         });
     });
 });
@@ -177,9 +166,9 @@ router.get('/me', protect, restrictTo('student'), (req, res) => {
         const student = results[0];
 
         const enrollSQL = `
-            SELECT s.code, s.name, s.units, s.type, e.status, e.school_year, e.semester,
+            SELECT s.id as subject_id, s.code, s.name, s.units, s.type, e.status, e.school_year, e.semester,
                    e.id as enrollment_id,
-                   sec.section_code, sec.day, sec.time_start, sec.time_end, sec.room
+                   sec.id as section_id, sec.section_code, sec.day, sec.time_start, sec.time_end, sec.room
             FROM enrollments e
             JOIN subjects s ON e.subject_id = s.id
             LEFT JOIN sections sec ON e.section_id = sec.id
@@ -189,11 +178,136 @@ router.get('/me', protect, restrictTo('student'), (req, res) => {
         db.query(enrollSQL, [student.id], (err, subjects) => {
             if (err) return res.status(500).json({ message: 'Database error', error: err });
 
-            db.query('SELECT * FROM notices WHERE student_id = ? AND resolved = 0', [student.id], (err, notices) => {
+            const sectionsSQL = `
+                SELECT sec.id as section_id, sec.subject_id, sec.section_code,
+                       sec.day, sec.time_start, sec.time_end, sec.room,
+                       sec.school_year, sec.semester, sec.capacity,
+                       (SELECT COUNT(*)
+                        FROM enrollments active
+                        WHERE active.section_id = sec.id
+                          AND active.status IN ('auto_enrolled', 'pre_enlisted', 'submitted_for_advising', 'officially_enrolled', 'manually_added')) as enrolled
+                FROM sections sec
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM enrollments e
+                    WHERE e.student_id = ?
+                      AND e.subject_id = sec.subject_id
+                      AND e.school_year = sec.school_year
+                      AND e.semester = sec.semester
+                      AND e.status IN ('auto_enrolled', 'pre_enlisted')
+                )
+                ORDER BY sec.subject_id, sec.section_code
+            `;
+            db.query(sectionsSQL, [student.id], (err, availableSections) => {
                 if (err) return res.status(500).json({ message: 'Database error', error: err });
-                res.json({ student, subjects, notices });
+
+                db.query('SELECT * FROM notices WHERE student_id = ? AND resolved = 0', [student.id], (err, notices) => {
+                    if (err) return res.status(500).json({ message: 'Database error', error: err });
+                    res.json({ student, subjects, availableSections, notices });
+                });
             });
         });
+    });
+});
+
+router.patch('/enrollments/:enrollment_id/section', protect, restrictTo('student'), (req, res) => {
+    const sectionId = req.body.section_id ? Number(req.body.section_id) : null;
+    if (req.body.section_id && (!Number.isInteger(sectionId) || sectionId < 1)) {
+        return res.status(400).json({ message: 'A valid section_id is required.' });
+    }
+
+    const enrollmentSQL = `
+        SELECT e.id, e.student_id, e.subject_id, e.school_year, e.semester, e.status, e.section_id
+        FROM enrollments e
+        JOIN users u ON u.student_id = e.student_id
+        WHERE e.id = ? AND u.id = ? AND e.status IN ('auto_enrolled', 'pre_enlisted')
+    `;
+    db.query(enrollmentSQL, [req.params.enrollment_id, req.user.id], (err, enrollments) => {
+        if (err) return res.status(500).json({ message: 'Database error', error: err });
+        if (!enrollments.length) return res.status(404).json({ message: 'Editable enrollment not found.' });
+
+        const enrollment = enrollments[0];
+        if (!sectionId) {
+            return db.query(
+                'UPDATE enrollments SET section_id = NULL WHERE id = ? AND student_id = ?',
+                [enrollment.id, enrollment.student_id],
+                (updateErr) => {
+                    if (updateErr) return res.status(500).json({ message: 'Database error', error: updateErr });
+                    res.json({ message: 'Section selection cleared.' });
+                }
+            );
+        }
+
+        db.query(
+            'SELECT id, subject_id, school_year, semester, day, time_start, time_end, capacity FROM sections WHERE id = ?',
+            [sectionId],
+            (err, sections) => {
+                if (err) return res.status(500).json({ message: 'Database error', error: err });
+                if (!sections.length) return res.status(404).json({ message: 'Section not found.' });
+
+                const section = sections[0];
+                if (section.subject_id !== enrollment.subject_id ||
+                    section.school_year !== enrollment.school_year ||
+                    Number(section.semester) !== Number(enrollment.semester)) {
+                    return res.status(400).json({ message: 'Choose a section offered for this subject and semester.' });
+                }
+
+                db.query(
+                    `SELECT COUNT(*) as enrolled FROM enrollments
+                     WHERE section_id = ?
+                       AND status IN ('auto_enrolled', 'pre_enlisted', 'submitted_for_advising', 'officially_enrolled', 'manually_added')`,
+                    [section.id],
+                    (err, counts) => {
+                        if (err) return res.status(500).json({ message: 'Database error', error: err });
+                        if (counts[0].enrolled >= section.capacity &&
+                            Number(enrollment.section_id) !== Number(section.id)) {
+                            return res.status(409).json({ message: 'This section is full. Choose another section.' });
+                        }
+
+                        db.query(
+                            `SELECT sec.day, sec.time_start, sec.time_end, s.code
+                             FROM enrollments e
+                             JOIN sections sec ON sec.id = e.section_id
+                             JOIN subjects s ON s.id = e.subject_id
+                             WHERE e.student_id = ? AND e.school_year = ? AND e.semester = ?
+                               AND e.id <> ? AND e.status IN ('auto_enrolled', 'pre_enlisted', 'submitted_for_advising', 'officially_enrolled', 'manually_added')`,
+                            [enrollment.student_id, enrollment.school_year, enrollment.semester, enrollment.id],
+                            (err, assignedSections) => {
+                                if (err) return res.status(500).json({ message: 'Database error', error: err });
+
+                                const selectedDays = String(section.day || '').split(/[\/,]/).map(day => day.trim()).filter(Boolean);
+                                const selectedStart = String(section.time_start || '');
+                                const selectedEnd = String(section.time_end || '');
+                                const conflict = selectedDays.length && selectedStart && selectedEnd &&
+                                    assignedSections.find(assigned => {
+                                        const assignedDays = String(assigned.day || '').split(/[\/,]/).map(day => day.trim());
+                                        const sharesDay = selectedDays.some(day => assignedDays.includes(day));
+                                        return sharesDay &&
+                                            selectedStart < String(assigned.time_end || '') &&
+                                            selectedEnd > String(assigned.time_start || '');
+                                    });
+
+                                if (conflict) {
+                                    return res.status(409).json({
+                                        message: `This section conflicts with ${conflict.code}'s schedule. Choose another section.`
+                                    });
+                                }
+
+                                db.query(
+                                    'UPDATE enrollments SET section_id = ? WHERE id = ? AND student_id = ? AND status IN ("auto_enrolled", "pre_enlisted")',
+                                    [section.id, enrollment.id, enrollment.student_id],
+                                    (updateErr, result) => {
+                                        if (updateErr) return res.status(500).json({ message: 'Database error', error: updateErr });
+                                        if (!result.affectedRows) return res.status(409).json({ message: 'This enrollment can no longer be changed.' });
+                                        res.json({ message: 'Section selected successfully.' });
+                                    }
+                                );
+                            }
+                        );
+                    }
+                );
+            }
+        );
     });
 });
 
@@ -422,105 +536,53 @@ router.post('/enroll-old', protect, restrictTo('student'), (req, res) => {
                                                 });
                                             }
 
-                                            // ---- SECTION CONFLICT CHECK ----
+                                            const conflictFree = toEnroll;
+                                            const totalUnits = conflictFree.reduce((sum, s) => sum + (s.units || 0), 0);
+                                            const standardUnits = nextSubjects.reduce((sum, s) => sum + s.units, 0);
+                                            const notices = [];
+
+                                            if (totalUnits < 15) {
+                                                notices.push({ type: 'unit_underload', message: `Your unit load (${totalUnits}) is below the minimum of 15 units. Please consult your advisor.` });
+                                            } else if (totalUnits > standardUnits) {
+                                                notices.push({ type: 'unit_overload', message: `Your unit load (${totalUnits}) exceeds the standard (${standardUnits} units). Please consult your advisor.` });
+                                            }
+
+                                            if (notEligible.length > 0) {
+                                                notices.push({
+                                                    type: 'f2f_required',
+                                                    message: `You do not meet prerequisites for: ${notEligible.map(s => s.code).join(', ')}. Please consult your advisor.`
+                                                });
+                                            }
+
+                                            if (conflictFree.length === 0) {
+                                                return res.json({ message: 'No eligible subjects found.', notices });
+                                            }
+
+                                            const enrollValues = conflictFree.map(s => [
+                                                student.id, s.subject_id, school_year, semester, 'pre_enlisted', null
+                                            ]);
+
                                             db.query(
-                                                'SELECT id as section_id, subject_id, day, time_start, time_end FROM sections WHERE school_year = ? AND semester = ?',
-                                                [school_year, semester],
-                                                (err, sections) => {
-                                                    if (err) return res.status(500).json({ message: 'Database error', error: err });
+                                                'INSERT INTO enrollments (student_id, subject_id, school_year, semester, status, section_id) VALUES ?',
+                                                [enrollValues],
+                                                (err) => {
+                                                    if (err) return res.status(500).json({ message: 'Error enrolling subjects', error: err });
 
-                                                    const sectionMap = {};
-                                                    sections.forEach(sec => {
-                                                        if (!sectionMap[sec.subject_id]) sectionMap[sec.subject_id] = sec;
+                                                    if (notices.length > 0) {
+                                                        const noticeValues = notices.map(n => [student.id, n.type, n.message]);
+                                                        db.query('INSERT INTO notices (student_id, type, message) VALUES ?', [noticeValues], () => {});
+                                                    }
+
+                                                    res.json({
+                                                        message: isRegular ? 'Regular enrollment complete.' : 'Irregular enrollment complete.',
+                                                        status: isRegular ? 'regular' : 'irregular',
+                                                        enrolled: conflictFree.map(s => `${s.code} - ${s.name}`),
+                                                        not_eligible: notEligible.map(s => `${s.code} - ${s.name}`),
+                                                        conflicts: [],
+                                                        notices,
+                                                        school_year,
+                                                        semester
                                                     });
-
-                                                    const assignedSections = [];
-                                                    const conflictFree = [];
-                                                    const conflicted = [];
-
-                                                    toEnroll.forEach(sub => {
-                                                        const sec = sectionMap[sub.subject_id];
-                                                        if (!sec || !sec.day || !sec.time_start || !sec.time_end) {
-                                                            conflictFree.push({ ...sub, section_id: sec ? sec.section_id : null });
-                                                            return;
-                                                        }
-
-                                                        const hasConflict = assignedSections.some(assigned => {
-                                                            if (assigned.day !== sec.day) return false;
-                                                            const newStart = sec.time_start;
-                                                            const newEnd = sec.time_end;
-                                                            return newStart < assigned.time_end && newEnd > assigned.time_start;
-                                                        });
-
-                                                        if (hasConflict) {
-                                                            conflicted.push(sub);
-                                                        } else {
-                                                            assignedSections.push(sec);
-                                                            conflictFree.push({ ...sub, section_id: sec.section_id });
-                                                        }
-                                                    });
-
-                                                    const totalUnits = conflictFree.reduce((sum, s) => sum + (s.units || 0), 0);
-                                                    const standardUnits = nextSubjects.reduce((sum, s) => sum + s.units, 0);
-                                                    const notices = [];
-
-                                                    if (totalUnits < 15) {
-                                                        notices.push({ type: 'unit_underload', message: `Your unit load (${totalUnits}) is below the minimum of 15 units. Please consult your advisor.` });
-                                                    } else if (totalUnits > standardUnits) {
-                                                        notices.push({ type: 'unit_overload', message: `Your unit load (${totalUnits}) exceeds the standard (${standardUnits} units). Please consult your advisor.` });
-                                                    }
-
-                                                    if (notEligible.length > 0) {
-                                                        notices.push({
-                                                            type: 'f2f_required',
-                                                            message: `You do not meet prerequisites for: ${notEligible.map(s => s.code).join(', ')}. Please consult your advisor.`
-                                                        });
-                                                    }
-
-                                                    if (conflicted.length > 0) {
-                                                        notices.push({
-                                                            type: 'conflict',
-                                                            message: `Schedule conflict detected. The following subjects were removed: ${conflicted.map(s => s.code).join(', ')}. Please consult your advisor.`
-                                                        });
-                                                    }
-
-                                                    if (conflictFree.length === 0) {
-                                                        return res.json({ message: 'No eligible subjects found.', notices });
-                                                    }
-
-                                                    const enrollValues = conflictFree.map(s => [
-                                                        student.id, s.subject_id, school_year, semester, 'pre_enlisted', s.section_id || null
-                                                    ]);
-
-                                                    const conflictValues = conflicted.map(s => [
-                                                        student.id, s.subject_id, school_year, semester, 'conflict_removed', null
-                                                    ]);
-
-                                                    const allEnrollValues = [...enrollValues, ...conflictValues];
-
-                                                    db.query(
-                                                        'INSERT INTO enrollments (student_id, subject_id, school_year, semester, status, section_id) VALUES ?',
-                                                        [allEnrollValues],
-                                                        (err) => {
-                                                            if (err) return res.status(500).json({ message: 'Error enrolling subjects', error: err });
-
-                                                            if (notices.length > 0) {
-                                                                const noticeValues = notices.map(n => [student.id, n.type, n.message]);
-                                                                db.query('INSERT INTO notices (student_id, type, message) VALUES ?', [noticeValues], () => {});
-                                                            }
-
-                                                            res.json({
-                                                                message: isRegular ? 'Regular enrollment complete.' : 'Irregular enrollment complete.',
-                                                                status: isRegular ? 'regular' : 'irregular',
-                                                                enrolled: conflictFree.map(s => `${s.code} - ${s.name}`),
-                                                                not_eligible: notEligible.map(s => `${s.code} - ${s.name}`),
-                                                                conflicts: conflicted.map(s => s.code),
-                                                                notices,
-                                                                school_year,
-                                                                semester
-                                                            });
-                                                        }
-                                                    );
                                                 }
                                             );
                                         });
@@ -563,24 +625,47 @@ router.post('/submit-advising', protect, restrictTo('student'), (req, res) => {
                     }
 
                     db.query(
-                        'SELECT id FROM teachers WHERE department_id = ? LIMIT 1',
-                        [student.department_id],
-                        (err, teachers) => {
+                        `SELECT s.code
+                         FROM enrollments e
+                         JOIN subjects s ON s.id = e.subject_id
+                         WHERE e.student_id = ? AND e.school_year = ? AND e.semester = ?
+                           AND e.status = 'pre_enlisted' AND e.section_id IS NULL
+                           AND EXISTS (
+                               SELECT 1 FROM sections sec
+                               WHERE sec.subject_id = e.subject_id
+                                 AND sec.school_year = e.school_year
+                                 AND sec.semester = e.semester
+                           )`,
+                        [student.id, school_year, semester],
+                        (err, unassigned) => {
                             if (err) return res.status(500).json({ message: 'Database error', error: err });
-                            const teacher_id = teachers.length > 0 ? teachers[0].id : null;
+                            if (unassigned.length) {
+                                return res.status(400).json({
+                                    message: `Choose a section for each subject before submitting: ${unassigned.map(s => s.code).join(', ')}.`
+                                });
+                            }
 
                             db.query(
-                                'INSERT INTO advising_requests (student_id, teacher_id, school_year, semester) VALUES (?, ?, ?, ?)',
-                                [student.id, teacher_id, school_year, semester],
-                                (err) => {
+                                'SELECT id FROM teachers WHERE department_id = ? LIMIT 1',
+                                [student.department_id],
+                                (err, teachers) => {
                                     if (err) return res.status(500).json({ message: 'Database error', error: err });
+                                    const teacher_id = teachers.length > 0 ? teachers[0].id : null;
 
                                     db.query(
-                                        'UPDATE enrollments SET status = "submitted_for_advising" WHERE student_id = ? AND school_year = ? AND semester = ? AND status = "pre_enlisted"',
-                                        [student.id, school_year, semester],
+                                        'INSERT INTO advising_requests (student_id, teacher_id, school_year, semester) VALUES (?, ?, ?, ?)',
+                                        [student.id, teacher_id, school_year, semester],
                                         (err) => {
                                             if (err) return res.status(500).json({ message: 'Database error', error: err });
-                                            res.json({ message: 'Subjects submitted for advising successfully. Please wait for your advisor to review.' });
+
+                                            db.query(
+                                                'UPDATE enrollments SET status = "submitted_for_advising" WHERE student_id = ? AND school_year = ? AND semester = ? AND status = "pre_enlisted"',
+                                                [student.id, school_year, semester],
+                                                (err) => {
+                                                    if (err) return res.status(500).json({ message: 'Database error', error: err });
+                                                    res.json({ message: 'Subjects submitted for advising successfully. Please wait for your advisor to review.' });
+                                                }
+                                            );
                                         }
                                     );
                                 }
