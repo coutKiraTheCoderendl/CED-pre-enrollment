@@ -144,8 +144,8 @@
 
   <hr class="divider"/>
 
-  <label for="username">ID Number</label>
-  <input type="text" id="username" placeholder="e.g. 26-1-00001"/>
+  <label for="username">Username or ID Number</label>
+  <input type="text" id="username" placeholder="Enter your username or ID number"/>
 
   <label for="password">Password</label>
   <input type="password" id="password" placeholder="Enter your password"/>
@@ -185,23 +185,25 @@ async function handleLogin() {
       return; 
     }
 
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('role', data.role);
+    const dashboards = {
+      student: '/student/dashboard.html',
+      admin: '/admin/dashboard.html',
+      teacher: '/teacher/dashboard.html'
+    };
+    const dashboard = dashboards[data.role];
 
-    if (data.role === 'student') {
-    window.location.href = '/student/dashboard.html';
-
-    } else if (data.role === 'admin') {
-    window.location.href = '/admin/dashboard.html';
-
-    } else if (data.role === 'business_office') {
-    window.location.href = '/bfo/dashboard.html';
-    
-  
-    } else if (data.role === 'teacher') {
-    window.location.href = '/teacher/dashboard.html';
+    if (!dashboard) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      showError(data.role === 'business_office'
+        ? 'Business Office access is no longer available.'
+        : 'This account does not have an available dashboard.');
+      return;
     }
 
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('role', data.role);
+    window.location.href = dashboard;
 
   } catch (err) {
     showError('Cannot connect to server. Please try again.');
