@@ -21,6 +21,9 @@ router.post('/sync-it', protect, restrictTo('admin'), (req, res) => {
         let alreadyExistingCount = 0;
         let noDepartmentCount = 0;
 
+        const currentYear = new Date().getFullYear();
+        const school_year = `${currentYear}-${currentYear + 1}`;
+
         // Step 2: handle one IT student at a time
         const processStudent = (index) => {
 
@@ -44,7 +47,10 @@ router.post('/sync-it', protect, restrictTo('admin'), (req, res) => {
             const programCode = itRow.program_code;
             const programName = itRow.program_name;
             const yearLevel = itRow.year_level;
-            const studentType = itRow.student_type;
+
+            // Force 'old' for any student above Year 1 regardless of what IT says
+            // Year 1 new students get auto-enrolled; everyone else goes through the old student flow
+            const resolvedType = (yearLevel > 1) ? 'old' : (itRow.student_type || 'new');
 
             // Step 3: skip if this student number is already in our system
             db.query('SELECT id FROM students WHERE student_number = ?', [studentNumber], (errCheck, existingRows) => {
@@ -55,7 +61,7 @@ router.post('/sync-it', protect, restrictTo('admin'), (req, res) => {
                     return processStudent(index + 1);
                 }
 
-                // Step 4: turn the IT program code (CpE) into our department id
+                // Step 4: turn the IT program code (e.g. CpE) into our department id
                 db.query('SELECT id FROM departments WHERE code = ?', [programCode], (errDept, departmentRows) => {
                     if (errDept) return res.status(500).json({ message: 'Database error', error: errDept.message });
 
@@ -73,14 +79,14 @@ router.post('/sync-it', protect, restrictTo('admin'), (req, res) => {
 
                     db.query(
                         insertStudentSQL,
-                        [studentNumber, firstName, lastName, age, address, departmentId, programName, yearLevel, studentType],
+                        [studentNumber, firstName, lastName, age, address, departmentId, programName, yearLevel, resolvedType],
                         (errInsert, insertResult) => {
                             if (errInsert) return res.status(500).json({ message: 'Error inserting student', error: errInsert.message });
 
                             const newStudentId = insertResult.insertId;
 
-                            // Step 6: create the login account (same rule as /api/students/new:
-                            // username = student number, password = student number, hashed)
+                            // Step 6: create the login account
+                            // username = student number, password = student number (hashed)
                             bcrypt.hash(studentNumber, 10, (errHash, passwordHash) => {
                                 if (errHash) return res.status(500).json({ message: 'Error hashing password' });
 
@@ -90,6 +96,59 @@ router.post('/sync-it', protect, restrictTo('admin'), (req, res) => {
                                     (errUser) => {
                                         if (errUser) return res.status(500).json({ message: 'Error creating user account', error: errUser.message });
 
+                                        // Step 7: auto-enroll freshmen (new, year 1) into Sem 1 subjects
+                                        // Step 7: auto-enroll freshmen (new, year 1) into Sem 1 subjects
+if (resolvedType === 'new' && yearLevel === 1) {
+    console.log(`[SYNC] Auto-enrolling ${studentNumber}, dept ${departmentId}, year ${yearLevel}`);
+    db.query(
+        `SELECT s.id as subject_id, s.units FROM curriculum c
+         JOIN subjects s ON c.subject_id = s.id
+         WHERE c.department_id = ? AND c.year_level = 1 AND c.semester = 1`,
+        [departmentId],
+        (errCurr, subjects) => {
+            console.log(`[SYNC] Curriculum query result:`, errCurr, subjects?.length);
+            if (errCurr || !subjects.length) {
+                addedCount = addedCount + 1;
+                return processStudent(index + 1);
+            }
+
+            db.query(
+                `SELECT subject_id, id as section_id FROM sections
+                 WHERE school_year = ? AND semester = 1`,
+                [school_year],
+                (errSec, sections) => {
+                    console.log(`[SYNC] Sections found:`, sections?.length);
+                    const sectionMap = {};
+                    if (sections) sections.forEach(sec => {
+                        if (!sectionMap[sec.subject_id]) sectionMap[sec.subject_id] = sec.section_id;
+                    });
+
+                    const enrollValues = subjects.map(sub => [
+                        newStudentId, sub.subject_id, school_year, 1, 'auto_enrolled',
+                        sectionMap[sub.subject_id] || null
+                    ]);
+
+                    console.log(`[SYNC] Inserting ${enrollValues.length} enrollments for student ${newStudentId}`);
+                    db.query(
+                        'INSERT INTO enrollments (student_id, subject_id, school_year, semester, status, section_id) VALUES ?',
+                        [enrollValues],
+                        (errEnroll) => {
+                            console.log(`[SYNC] Enroll result:`, errEnroll);
+                            if (errEnroll) console.error('Auto-enroll error for ' + studentNumber, errEnroll);
+                            addedCount = addedCount + 1;
+                            processStudent(index + 1);
+                        }
+                    );
+                }
+            );
+        }
+    );
+    return;
+}
+                                        
+
+                                        // Higher year or shiftee — just count and move on
+                                        // They will enroll through the old student flow after admin clears them
                                         addedCount = addedCount + 1;
                                         processStudent(index + 1);
                                     }
