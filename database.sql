@@ -229,7 +229,7 @@ CREATE TABLE advising_requests (
     school_year VARCHAR(10) NOT NULL,
     semester    TINYINT NOT NULL,
     submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    reviewed_at  TIMESTAMP NULL DEFAULT NULL,
+    reviewed_at  TIMESTAMP DEFAULT NULL,
     FOREIGN KEY (student_id) REFERENCES students(id),
     FOREIGN KEY (teacher_id) REFERENCES teachers(id)
 );
@@ -542,7 +542,6 @@ ALTER TABLE users MODIFY COLUMN role
 ENUM('student','admin','business_office','teacher') NOT NULL;
 
 UPDATE users SET password = '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' WHERE username = 'admin';
-UPDATE users SET password = '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' WHERE username = 'busoff';
 
 INSERT INTO users (username, password, role) VALUES 
 ('teacher1', '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'teacher');
@@ -611,5 +610,77 @@ ADD CONSTRAINT enrollments_ibfk_3
 FOREIGN KEY (section_id) REFERENCES sections(id) 
 ON DELETE SET NULL;
 
+CREATE USER 'ced_ReadOnly'@'localhost' IDENTIFIED BY '';
+GRANT SELECT ON it_department.* TO 'ced_ReadOnly'@'localhost';
+FLUSH PRIVILEGES;
+
+UPDATE enrollments e
+JOIN sections sec ON sec.subject_id = e.subject_id
+    AND sec.school_year = e.school_year
+    AND sec.semester = e.semester
+SET e.section_id = sec.id
+WHERE e.section_id IS NULL
+AND e.school_year = '2026-2027'
+AND e.semester = 1
+AND e.semester = 2;
+
 -- for testing only; remove when done
-SHOW COLUMNS FROM students LIKE 'type';
+
+-- Year 1 Sem 1 subjects for CpE (based on your curriculum)
+-- Get the subject IDs first so we can reference them
+USE ced_preenrollment;
+SELECT id, code, name FROM subjects 
+WHERE code IN ('CpE 1','CpE 11','EM 11','EM 13','GE 1','GE 2','GE 7','GE 9','PE 1','NSTP 1')
+ORDER BY code;
+
+USE ced_preenrollment;
+
+-- Get their IDs first to verify
+SELECT id, student_number, first_name, type, year_level FROM students WHERE student_number LIKE 'SIM-%';
+
+SET SQL_SAFE_UPDATES = 0;
+
+DELETE FROM advising_requests WHERE student_id IN (SELECT id FROM students WHERE student_number LIKE 'SIM-%');
+DELETE FROM subject_change_requests WHERE student_id IN (SELECT id FROM students WHERE student_number LIKE 'SIM-%');
+DELETE FROM notices WHERE student_id IN (SELECT id FROM students WHERE student_number LIKE 'SIM-%');
+DELETE FROM grades WHERE student_id IN (SELECT id FROM students WHERE student_number LIKE 'SIM-%');
+DELETE FROM enrollments WHERE student_id IN (SELECT id FROM students WHERE student_number LIKE 'SIM-%');
+DELETE FROM users WHERE student_id IN (SELECT id FROM students WHERE student_number LIKE 'SIM-%');
+DELETE FROM students WHERE student_number LIKE 'SIM-%';
+
+SET SQL_SAFE_UPDATES = 1;
+
+SELECT s.student_number, s.first_name, s.year_level, s.type, COUNT(e.id) as enrolled_subjects
+FROM students s
+LEFT JOIN enrollments e ON e.student_id = s.id
+WHERE s.student_number LIKE 'SIM-%'
+GROUP BY s.id;
+
+-- ----
+
+-- Check if the Year 1 students landed with the right type
+SELECT id, student_number, first_name, year_level, type FROM students WHERE student_number LIKE 'SIM-%';
+
+-- Check if any enrollments were created at all
+SELECT s.student_number, s.year_level, s.type, COUNT(e.id) as enrolled_subjects
+FROM students s
+LEFT JOIN enrollments e ON e.student_id = s.id
+WHERE s.student_number LIKE 'SIM-%'
+GROUP BY s.id;
+
+-- Check what school year the enrollment settings are on
+SELECT * FROM enrollment_settings ORDER BY id DESC LIMIT 1;
+
+-- Check what school year the existing sections are in
+SELECT school_year, semester, COUNT(*) as section_count FROM sections GROUP BY school_year, semester;
+
+SELECT c.year_level, c.semester, COUNT(*) as subject_count, d.code
+FROM curriculum c
+JOIN departments d ON c.department_id = d.id
+WHERE c.year_level = 1 AND c.semester = 1
+GROUP BY c.department_id;
+
+SELECT s.student_number, s.year_level, s.type, s.department_id, d.code
+FROM students s
+JOIN departments d ON s.department_id = d.id
+WHERE s.student_number LIKE 'SIM-%';
