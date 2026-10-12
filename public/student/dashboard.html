@@ -290,19 +290,43 @@ async function loadDashboard() {
     if (subjects.length === 0) {
       tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No subjects enlisted yet.</td></tr>`;
     } else {
-      tbody.innerHTML = subjects.map(s => `
-  <tr>
-    <td class="subject-code">${escapeHtml(s.code)}</td>
-    <td>${escapeHtml(s.name)}</td>
-    <td>${Number(s.units)}</td>
-    <td>${escapeHtml(s.section_code || '—')}</td>
-    <td>${escapeHtml(s.day || '—')} ${s.time_start ? escapeHtml(s.time_start.substring(0,5)) : ''}</td>
-    <td><span class="badge badge-${s.status === 'officially_enrolled' ? 'enrolled' : s.status === 'submitted_for_advising' ? 'submitted' : 'pre'}">${escapeHtml(s.status.replace(/_/g, ' '))}</span></td>
-    <td>${s.status === 'pre_enlisted' 
-      ? `<button class="btn-remove" onclick="removeSubject(${Number(s.enrollment_id)})">Remove</button>` 
-      : '—'}</td>
-  </tr>
-`).join('');
+      tbody.innerHTML = subjects.map(s => {
+  const canChoose = s.status === 'pre_enlisted';
+  const sectionCell = canChoose
+    ? `<select class="section-select" onchange="changeSection(${s.enrollment_id}, this.value)" id="sec-select-${s.enrollment_id}">
+         <option value="">Loading sections...</option>
+       </select>`
+    : escapeHtml(s.section_code || '—');
+
+  return `
+    <tr>
+      <td class="subject-code">${escapeHtml(s.code)}</td>
+      <td>${escapeHtml(s.name)}</td>
+      <td>${Number(s.units)}</td>
+      <td>${sectionCell}</td>
+      <td>${escapeHtml(s.day || '—')} ${s.time_start ? escapeHtml(s.time_start.substring(0,5)) : ''}</td>
+      <td><span class="badge badge-${s.status === 'officially_enrolled' ? 'enrolled' : s.status === 'submitted_for_advising' ? 'submitted' : 'pre'}">${escapeHtml(s.status.replace(/_/g, ' '))}</span></td>
+      <td>${s.status === 'pre_enlisted' ? `<button class="btn-remove" onclick="removeSubject(${Number(s.enrollment_id)})">Remove</button>` : '—'}</td>
+    </tr>
+  `;
+}).join('');
+
+// Load sections for each pre_enlisted subject
+subjects.filter(s => s.status === 'pre_enlisted').forEach(async s => {
+  const res = await fetch(`${API}/api/students/sections/${s.subject_id}`, { headers: authHeaders() });
+  const sections = await res.json();
+  const sel = document.getElementById(`sec-select-${s.enrollment_id}`);
+  if (!sel) return;
+  sel.innerHTML = `<option value="">Choose a section…</option>` +
+    sections.map(sec => {
+      const schedule = [sec.day, sec.time_start ? sec.time_start.substring(0,5) : '', sec.room].filter(Boolean).join(' · ');
+      const isFull = sec.enrolled >= sec.capacity;
+      const isSelected = s.section_id === sec.id;
+      return `<option value="${sec.id}" ${isSelected ? 'selected' : ''} ${isFull && !isSelected ? 'disabled' : ''}>
+        ${escapeHtml(sec.section_code)}${schedule ? ` — ${escapeHtml(schedule)}` : ''}${isFull ? ' (Full)' : ''}
+      </option>`;
+    }).join('');
+});
       document.getElementById('totalUnits').textContent = `Total: ${subjects.reduce((sum, s) => sum + s.units, 0)} units`;
     }
 
@@ -394,6 +418,19 @@ async function loadContacts() {
       </div>
     `).join('');
   } catch (err) { }
+}
+
+async function changeSection(enrollmentId, sectionId) {
+  try {
+    const res = await fetch(`${API}/api/students/enrollments/${enrollmentId}/section`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ section_id: sectionId || null })
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.message || 'Could not select that section.'); loadDashboard(); return; }
+    loadDashboard();
+  } catch (err) { alert('Connection error'); loadDashboard(); }
 }
 
 //I UNCOMMENT RANI

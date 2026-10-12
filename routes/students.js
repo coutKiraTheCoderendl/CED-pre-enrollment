@@ -813,4 +813,58 @@ router.get('/contacts', protect, restrictTo('student'), (req, res) => {
     });
 });
 
+// Student updates their own section assignment
+router.patch('/enrollments/:enrollment_id/section', protect, restrictTo('student'), (req, res) => {
+    const { section_id } = req.body;
+    const userId = req.user.id;
+
+    // Verify this enrollment belongs to the student and is still pre_enlisted
+    db.query(
+        `SELECT e.id FROM enrollments e
+         JOIN students s ON e.student_id = s.id
+         JOIN users u ON u.student_id = s.id
+         WHERE e.id = ? AND u.id = ? AND e.status = 'pre_enlisted'`,
+        [req.params.enrollment_id, userId],
+        (err, rows) => {
+            if (err) return res.status(500).json({ message: 'Database error', error: err });
+            if (!rows.length) return res.status(403).json({ message: 'Cannot update this enrollment.' });
+
+            db.query(
+                'UPDATE enrollments SET section_id = ? WHERE id = ?',
+                [section_id || null, req.params.enrollment_id],
+                (err) => {
+                    if (err) return res.status(500).json({ message: 'Database error', error: err });
+                    res.json({ message: 'Section updated.' });
+                }
+            );
+        }
+    );
+});
+
+// Get available sections for a subject
+router.get('/sections/:subject_id', protect, restrictTo('student'), (req, res) => {
+    db.query(
+        'SELECT * FROM enrollment_settings ORDER BY id DESC LIMIT 1',
+        (err, settings) => {
+            if (err) return res.status(500).json({ message: 'Database error', error: err });
+            const { school_year, semester } = settings[0];
+
+            db.query(
+                `SELECT sec.id, sec.section_code, sec.day, sec.time_start, sec.time_end, sec.room, sec.capacity,
+                        COUNT(e.id) as enrolled
+                 FROM sections sec
+                 LEFT JOIN enrollments e ON e.section_id = sec.id
+                     AND e.status NOT IN ('dropped', 'conflict_removed')
+                 WHERE sec.subject_id = ? AND sec.school_year = ? AND sec.semester = ?
+                 GROUP BY sec.id`,
+                [req.params.subject_id, school_year, semester],
+                (err, sections) => {
+                    if (err) return res.status(500).json({ message: 'Database error', error: err });
+                    res.json(sections);
+                }
+            );
+        }
+    );
+});
+
 module.exports = router;
